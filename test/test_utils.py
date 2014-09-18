@@ -15,30 +15,22 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 
-import re
+import unittest
 import uuid
 
-
-def normalize(name):
-    """
-    Lowercases and removes non-alphanumeric characters.
-    Optionally it removes everything after a 'feat.'.
-    """
-    if name is None:
-        return None
-
-    name = name.strip().lower()
-    name = re.sub(r"\s+\(feat. [^)]*\)", "", name, flags=re.IGNORECASE | re.UNICODE)
-    name = re.sub(r"\W+", "", name, flags=re.IGNORECASE | re.UNICODE)
-
-    return name
+from podtimizer.utils import normalize, validate_mbid
 
 
-def validate_mbid(mbid):
-    """
-    Returns an mbid if argument contains one, None otherwise.
-    """
-    try:
-        return str(uuid.UUID(mbid.strip()))
-    except ValueError:
-        return None
+class TestUtils(unittest.TestCase):
+
+    def test_normalize(self):
+        self.assertEqual(normalize("Dragonforce  "), "dragonforce")
+        self.assertEqual(normalize("Altaria (super remix)"), "altariasuperremix")
+        self.assertEqual(normalize("Armin van Buuren (feat. Sharon)"), "arminvanbuuren")
+        self.assertEqual(normalize(None), None)
+
+    def test_validate_mbid(self):
+        mbid = str(uuid.uuid4())
+        self.assertEqual(validate_mbid(mbid), mbid)
+        self.assertEqual(validate_mbid(mbid + " "), mbid)
+        self.assertEqual(validate_mbid("potato"), None)

@@ -51,7 +51,16 @@ def parse_size(size):
 
 class Settings():
 
+    @classmethod
+    def get(cls):
+        if cls.settings is None:
+            cls.settings = cls()
+        return cls.settings
+
     def __init__(self):
+        self.parse()
+
+    def parse(self):
         parser = argparse.ArgumentParser(description="Generate a playlist.")
         parser.add_argument(
             '-m', '--music-dirs',
@@ -98,8 +107,5 @@ class Settings():
         return self.settings
 
 
-settings = Settings()
-
-
 def main():
-    print(settings.dump_settings())
+    print(Settings.get().dump_settings())
