@@ -49,7 +49,14 @@ def parse_size(size):
         raise argparse.ArgumentTypeError("Invalid size unit '%s'." % components[1])
 
 
+DEFAULT_SETTINGS = {
+    'DATABASE': '~/.podtimizer/db/{}_scrobblings.db.sqlite3'
+}
+
+
 class Settings():
+
+    settings = None
 
     @classmethod
     def get(cls):
@@ -58,15 +65,21 @@ class Settings():
         return cls.settings
 
     def __init__(self):
-        self.parse()
+        self.load_defaults()
+        self.parse_args()
+        self.settings["DATABASE"] = self.settings["DATABASE"].format(self.settings["USERNAME"])
 
-    def parse(self):
+    def load_defaults(self):
+        self.settings = DEFAULT_SETTINGS.copy()
+
+    def parse_args(self):
         parser = argparse.ArgumentParser(description="Generate a playlist.")
         parser.add_argument(
             '-m', '--music-dirs',
             nargs='+',
             metavar='dir',
             required=True,
+            dest='MUSIC_DIRS',
             help="directories to scan for music files"
         )
         parser.add_argument(
@@ -74,12 +87,14 @@ class Settings():
             nargs='?',
             type=open,
             default=sys.stdout,
+            #dest='OUTPUT_FILE',
             help="file to write the resulting playlist (default is stdout)"
         )
         parser.add_argument(
             '-u', '--username',
             metavar='name',
             required=True,
+            dest='USERNAME',
             help="last.fm username whose scrobblings will be fetched and analyzed"
         )
         parser.add_argument(
@@ -87,6 +102,7 @@ class Settings():
             type=parse_size,
             metavar='size',
             required=True,
+            dest='MAX_SIZE',
             help="maximum combined size in bytes (or larger units) of music files of output"
                  " playlist, e.g. 100, 200M, 3.5G"
         )
@@ -95,11 +111,11 @@ class Settings():
             action='version',
             version="podtimizer %s" % __version__
         )
-        self.settings = vars(parser.parse_args())
+        self.settings.update(vars(parser.parse_args()))
 
     def __getattr__(self, name):
         try:
-            self.settings[name]
+            self.settings[name.upper()]
         except KeyError:
             raise AttributeError("No such setting '%s'" % name)
 
