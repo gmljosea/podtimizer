@@ -27,6 +27,7 @@ class TestUtils(unittest.TestCase):
         self.assertEqual(normalize("Dragonforce  "), "dragonforce")
         self.assertEqual(normalize("Altaria (super remix)"), "altariasuperremix")
         self.assertEqual(normalize("Armin van Buuren (feat. Sharon)"), "arminvanbuuren")
+        self.assertEqual(normalize('  '), None)
         self.assertEqual(normalize(None), None)
 
     def test_validate_mbid(self):

@@ -21,10 +21,11 @@ import uuid
 
 def normalize(name):
     """
-    Lowercases and removes non-alphanumeric characters.
-    Optionally it removes everything after a 'feat.'.
+    Lowercases, removes non-alphanumeric characters and removes 'featured artists' of the form
+    (feat. x).
+    It returns None if the argument is None, or if the argument only has whitespace.
     """
-    if name is None:
+    if name is None or len(name.strip()) == 0:
         return None
 
     name = name.strip().lower()
@@ -36,7 +37,8 @@ def normalize(name):
 
 def validate_mbid(mbid):
     """
-    Returns an mbid if argument contains one, None otherwise.
+    Returns an mbid if the argument is a valid mbid, None otherwise.
+    Any prepended or appended whitespace is removed.
     """
     try:
         return str(uuid.UUID(mbid.strip()))
