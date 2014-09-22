@@ -67,7 +67,6 @@ class Settings():
     def __init__(self):
         self.load_defaults()
         self.parse_args()
-        self.settings["DATABASE"] = self.settings["DATABASE"].format(self.settings["USERNAME"])
 
     def load_defaults(self):
         self.settings = DEFAULT_SETTINGS.copy()
