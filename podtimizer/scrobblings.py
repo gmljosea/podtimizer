@@ -18,13 +18,13 @@
 from collections import deque
 from datetime import datetime
 import logging
+import os
 import requests
 import sqlite3
 
 from pytz import utc
 
 from podtimizer.utils import normalize
-from podtimizer import Settings
 
 
 SCROBBLING_SCHEMA_SQL = """
@@ -70,7 +70,7 @@ class Scrobbling():
             self.artist, self.artist_mbid,
             self.album, self.album_mbid,
             self.track, self.track_mbid,
-            self.date
+            self.date.timestamp()
         )
 
     def __str__(self):
@@ -79,10 +79,11 @@ class Scrobbling():
 
 class ScrobblingCollection():
 
-    def __init__(self, username):
+    def __init__(self, username, db_format):
         self.username = username
-        self.db_name = Settings.get().database.format(username)
-        self.db = sqlite3.connect(self.db_name)
+        self.db_name = db_format.format(username)
+        os.makedirs(os.path.split(self.db_name)[0], exist_ok=True)
+        self.db = sqlite3.connect(self.db_name, detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
         self.db.execute(SCROBBLING_SCHEMA_SQL)
         self.all = deque()
 
@@ -94,16 +95,17 @@ class ScrobblingCollection():
         return r[0] if r is not None else 0
 
     def sync(self):
-        logging.debug("Starting scrobblings sync for user '{}'".format(self.username))
+        logging.info("Starting scrobblings sync for user '{}'".format(self.username))
         last_date = self.get_most_recent_date()
 
         for scrobbling in Lastfm.get_recent_tracks(starting_from=last_date, username=self.username):
             try:
                 self.db.execute(INSERT_SCROBBLING_SQL, scrobbling.row())
-                logging.info("Added scrobbling {}".format(scrobbling))
+                logging.debug("Added scrobbling {}".format(scrobbling))
                 self.all.append(scrobbling)
             except sqlite3.IntegrityError:
-                logging.info("Skipping duplicate scrobbling {}".format(scrobbling))
+                logging.debug("Skipping duplicate scrobbling {}".format(scrobbling))
+            self.db.commit()
 
     def __del__(self):
         self.db.close()
@@ -112,6 +114,7 @@ class ScrobblingCollection():
 class Lastfm():
     # TODO: Handle Lastfm API failures (I mean, don't always expect to get a nice HTTP 200
     # or proper JSON)
+    # Also validate every field actually exists before fetching
 
     API_KEY = "e4f145a5cd3f3781bf6dbd17d2019e3e"
     API_URL = "http://ws.audioscrobbler.com/2.0/"
@@ -124,7 +127,7 @@ class Lastfm():
             "method": "user.getrecenttracks",
             "user": username,
             "from": starting_from,
-            "page": 2147483647,
+            "page": 2000000000,
             "limit": 200,
             "format": "json"
         }
@@ -132,10 +135,17 @@ class Lastfm():
         while True:
             data = cls.call_api(api_params)
 
+            if "recenttracks" not in data:
+                logging.critical("Shit is going down")
+                logging.critical("This is what I got from Last.fm: {}".format(data))
+                logging.critical("Retrying...")
+                continue
+
             if "@attr" not in data["recenttracks"]:
                 break
 
-            logging.info("{} scrobblings left to sync.".format(data["@attr"]["total"]))
+            tracks_left = data["recenttracks"]["@attr"]["total"]
+            logging.info("{} scrobblings left to sync.".format(tracks_left))
 
             if not isinstance(data["recenttracks"]["track"], list):
                 data["recenttracks"]["track"] = [data["recenttracks"]["track"]]
@@ -165,11 +175,11 @@ class Lastfm():
                 )
 
     @classmethod
-    def call_api(cls, params, max_attempts=5):
+    def call_api(cls, params, max_attempts=10):
         params["api_key"] = cls.API_KEY
         for i in range(max_attempts):
             try:
-                r = requests.get(cls.API_URL, params=params, timeout=cls.TIMEOUT)
+                r = requests.get(cls.API_URL, params=params, timeout=(cls.TIMEOUT, cls.TIMEOUT))
                 return r.json()
             except requests.exceptions.Timeout:
                 continue

@@ -19,6 +19,10 @@ import re
 import uuid
 
 
+def empty(val):
+    return '' if val is None else val
+
+
 def normalize(name):
     """
     Lowercases, removes non-alphanumeric characters and removes 'featured artists' of the form

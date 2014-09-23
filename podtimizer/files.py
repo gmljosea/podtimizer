@@ -59,7 +59,11 @@ class MusicFile():
         If the file doesn't have at least a track name or a track MBID, a
         MusicFile.InsufficientMetadata exception will be thrown.
         """
-        self.metadata = mutagen.File(filename, easy=True)
+        try:
+            self.metadata = mutagen.File(filename, easy=True)
+        except mutagen.mp3.HeaderNotFoundError:
+            raise MusicFile.UnknownFormat()
+
         if self.metadata is None:
             raise MusicFile.UnknownFormat()
 
@@ -123,7 +127,9 @@ class MusicFileCollection():
         album = mfile.album_norm
         track = mfile.track_norm
 
-        self.tracks_by_text.setdefault(artist, {album: {track: mfile}})
+        self.tracks_by_text.setdefault(artist, {})
+        self.tracks_by_text[artist].setdefault(album, {})
+        self.tracks_by_text[artist][album].setdefault(track, mfile)
 
         mbid = mfile.mbid
         if mbid is not None:
@@ -145,7 +151,7 @@ class MusicFileCollection():
                 except MusicFile.InsufficientMetadata:
                     logging.info("Skipping {} due to insufficient metadata.".format(filename))
                 except MusicFile.UnknownFormat:
-                    logging.info("Not a music file {}-".format(filename))
+                    pass#logging.info("Not a music file {}-".format(filename))
 
 
 class Playlist():
@@ -157,11 +163,10 @@ class Playlist():
     def add_file(self, mfile):
         self.mfiles.append(mfile)
 
-    def to_m3u(self, filename):
+    def to_m3u(self, file):
         """
         Writes to filename a file containing the filename of each music file contained in this list,
         in order.
         """
-        with open(filename, 'w') as f:
-            for mfile in self.mfiles:
-                f.write(mfile.filename + "\n")
+        for mfile in self.mfiles:
+            file.write(mfile.filename + "\n")
