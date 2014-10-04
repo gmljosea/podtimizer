@@ -56,6 +56,12 @@ def parse_size(size):
         raise argparse.ArgumentTypeError("Invalid size unit '%s'." % components[1])
 
 
+def check_dir(dir):
+    if not os.path.isdir(dir):
+        raise argparse.ArgumentTypeError("{} doesn't exist or isn't a directory.".format(dir))
+    return dir
+
+
 DEFAULT_SETTINGS = {
     'DATABASE': os.path.expanduser('~/.podtimizer/db/{}_scrobblings.db.sqlite3')
 }
@@ -75,6 +81,7 @@ class Settings():
         parser.add_argument(
             '-m', '--music-dirs',
             nargs='+',
+            type=check_dir,
             metavar='dir',
             required=True,
             dest='MUSIC_DIRS',
