@@ -127,19 +127,22 @@ class Settings():
 
 
 def main():
-    settings = Settings()
+    try:
+        settings = Settings()
 
-    if settings.verbosity > 0:
-        logging.getLogger().setLevel('DEBUG')
+        if settings.verbosity > 0:
+            logging.getLogger().setLevel('DEBUG')
 
-    scrobc = ScrobblingCollection(settings.username, settings.database)
+        scrobc = ScrobblingCollection(settings.username, settings.database)
 
-    mfilec = MusicFileCollection()
-    for dir in settings.music_dirs:
-        mfilec.scan_directory(dir)
+        mfilec = MusicFileCollection()
+        for dir in settings.music_dirs:
+            mfilec.scan_directory(dir)
 
-    scrobc.sync()
+        scrobc.sync()
 
-    songrank = SongRank(mfilec, scrobc)
-    playlist = songrank.generate_playlist(settings.max_size)
-    playlist.to_m3u(settings.output_file)
+        songrank = SongRank(mfilec, scrobc)
+        playlist = songrank.generate_playlist(settings.max_size)
+        playlist.to_m3u(settings.output_file)
+    except KeyboardInterrupt:
+        sys.exit(1)
