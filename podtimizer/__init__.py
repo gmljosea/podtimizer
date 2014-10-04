@@ -16,7 +16,6 @@
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 
 import argparse
-import functools
 import logging
 import os
 import re
@@ -63,6 +62,12 @@ def check_dir(dir):
     return dir
 
 
+def open_output(path):
+    try:
+        return open(path, mode="w")
+    except OSError as e:
+        raise argparse.ArgumentTypeError("Couldn't open output file: {}".format(str(e)))
+
 def check_username(username):
     api_params = {
         "method": "user.getinfo",
@@ -105,7 +110,7 @@ class Settings():
             #'output-file',
             nargs='?',
             metavar='output-file',
-            type=functools.partial(open, mode='w'),
+            type=open_output,
             default=sys.stdout,
             dest='OUTPUT_FILE',
             help="file to write the resulting playlist (default is stdout)"
