@@ -16,13 +16,11 @@
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 
 import argparse
-import concurrent.futures as futures
 import functools
 import logging
 import os
 import re
 import sys
-import time
 
 from podtimizer.files import MusicFileCollection
 from podtimizer.scrobblings import ScrobblingCollection
@@ -120,16 +118,6 @@ class Settings():
         except KeyError:
             raise AttributeError("No such setting '%s'" % name)
 
-    def dump_settings(self):
-        return self.settings
-
-
-def find_music(mfilec, dirs):
-    print("There we go")
-    for dir in dirs:
-        mfilec.scan_directory(dir)
-        print("sdfsdf", dir)
-
 
 def main():
     settings = Settings()
@@ -138,12 +126,11 @@ def main():
     scrobc = ScrobblingCollection(settings.username, settings.database)
     mfilec = MusicFileCollection()
 
-    find_music(mfilec, settings.music_dirs)
+    for dir in settings.music_dirs:
+        mfilec.scan_directory(dir)
+
     scrobc.sync()
 
-    #import json
-    #json.dump(mfilec.tracks_by_text, open("dumperino_1.json", mode='w'), indent=4)
-    #json.dump(mfilec.tracks_by_mbid, open("dumperino_2.json", mode='w'), indent=4)
-
-    playlist = SongRank(mfilec, scrobc).generate_playlist(settings.max_size)
+    songrank = SongRank(mfilec, scrobc)
+    playlist = songrank.generate_playlist(settings.max_size)
     playlist.to_m3u(settings.output_file)

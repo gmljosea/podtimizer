@@ -39,12 +39,12 @@ SCROBBLING_SCHEMA_SQL = """
         CONSTRAINT pk_track UNIQUE (artist, artistMBID, album, albumMBID, track, trackMBID, date),
         CONSTRAINT enough_metadata CHECK (track IS NOT NULL OR trackMBID IS NOT NULL)
     );"""
-LAST_DATE_SQL = "SELECT Date FROM Scrobbling ORDER BY Date DESC LIMIT 1;"
+LAST_DATE_SQL = "SELECT date FROM Scrobbling ORDER BY date DESC LIMIT 1;"
 INSERT_SCROBBLING_SQL = "INSERT INTO SCROBBLING VALUES (?,?,?,?,?,?,?)"
 ALL_SCROBBLINGS_SQL = "SELECT * FROM SCROBBLING"
 
 
-def _empty_to_none(string):
+def empty_to_none(string):
     return string if len(string) > 0 else None
 
 
@@ -112,13 +112,13 @@ class ScrobblingCollection():
 
 
 class Lastfm():
-    # TODO: Handle Lastfm API failures (I mean, don't always expect to get a nice HTTP 200
-    # or proper JSON)
-    # Also validate every field actually exists before fetching
 
     API_KEY = "e4f145a5cd3f3781bf6dbd17d2019e3e"
     API_URL = "http://ws.audioscrobbler.com/2.0/"
     TIMEOUT = 10
+
+    class APIException(Exception):
+        pass
 
     @classmethod
     def get_recent_tracks(cls, username, starting_from=0):
@@ -133,13 +133,17 @@ class Lastfm():
         }
 
         while True:
-            data = cls.call_api(api_params)
+            try:
+                data = cls.call_api(api_params)
+            except Lastfm.APIException:
+                logging.error("Failed API call.")
+                logging.error("Aborting sync, will work with whatever we have.")
+                break
 
             if "recenttracks" not in data:
-                logging.critical("Shit is going down")
-                logging.critical("This is what I got from Last.fm: {}".format(data))
-                logging.critical("Retrying...")
-                continue
+                logging.error("Unexpected response format from Last.fm: {}".format(data))
+                logging.error("Aborting sync, will work with whatever we have.")
+                break
 
             if "@attr" not in data["recenttracks"]:
                 break
@@ -157,13 +161,17 @@ class Lastfm():
                     # whole call.
                     break
 
-                artist = _empty_to_none(track_data["artist"]["#text"])
-                artist_mbid = _empty_to_none(track_data["artist"]["mbid"])
-                album = _empty_to_none(track_data["album"]["#text"])
-                album_mbid = _empty_to_none(track_data["album"]["mbid"])
-                track = _empty_to_none(track_data["name"])
-                track_mbid = _empty_to_none(track_data["mbid"])
-                date = int(track_data["date"]["uts"])
+                artist = empty_to_none(track_data.get("artist", {}).get("#text", ""))
+                artist_mbid = empty_to_none(track_data.get("artist", {}).get("mbid", ""))
+                album = empty_to_none(track_data.get("album", {}).get("#text", ""))
+                album_mbid = empty_to_none(track_data.get("album", {}).get("mbid", ""))
+                track = empty_to_none(track_data.get("name", ""))
+                track_mbid = empty_to_none(track_data.get("mbid", ""))
+                date = int(track_data.get("date", {}).get("uts", 0))
+
+                if date == 0 or (track is None and track_mbid is None):
+                    logging.error("Skipping scrobbling with insufficient metadata.")
+                    continue
 
                 api_params["from"] = date
 
@@ -178,8 +186,18 @@ class Lastfm():
     def call_api(cls, params, max_attempts=10):
         params["api_key"] = cls.API_KEY
         for i in range(max_attempts):
+            if i > 1:
+                logging.error("Retrying...")
             try:
                 r = requests.get(cls.API_URL, params=params, timeout=(cls.TIMEOUT, cls.TIMEOUT))
-                return r.json()
+                if r.status_code != requests.codes.ok:
+                    logging.error("API HTTP error {} - {}".format(r.status_code, r.reason))
+                    continue
+                json = r.json()
+                if "error" in json:
+                    logging.error("API error {} - {}".format(json["error"], json["messages"]))
+                else:
+                    return json
             except requests.exceptions.Timeout:
-                continue
+                logging.error("API call timed out.")
+        raise Lastfm.APIException()

@@ -149,9 +149,9 @@ class MusicFileCollection():
                 try:
                     self.add_file(MusicFile(os.path.join(root, filename)))
                 except MusicFile.InsufficientMetadata:
-                    logging.info("Skipping {} due to insufficient metadata.".format(filename))
+                    logging.debug("Skipping {} due to insufficient metadata.".format(filename))
                 except MusicFile.UnknownFormat:
-                    pass#logging.info("Not a music file {}-".format(filename))
+                    logging.debug("Not a music file {}-".format(filename))
 
 
 class Playlist():
