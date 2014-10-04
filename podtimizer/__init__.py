@@ -26,7 +26,7 @@ from podtimizer.files import MusicFileCollection
 from podtimizer.scrobblings import ScrobblingCollection
 from podtimizer.algorithms import SongRank
 
-__version__ = "0.1.dev"
+__version__ = "0.1"
 
 SIZE_UNITS = {
     "K": 1024,
