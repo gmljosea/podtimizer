@@ -23,8 +23,9 @@ import re
 import sys
 
 from podtimizer.files import MusicFileCollection
-from podtimizer.scrobblings import ScrobblingCollection
+from podtimizer.scrobblings import ScrobblingCollection, Lastfm
 from podtimizer.algorithms import SongRank
+from podtimizer.utils import err_print
 
 __version__ = "0.2.dev"
 
@@ -60,6 +61,19 @@ def check_dir(dir):
     if not os.path.isdir(dir):
         raise argparse.ArgumentTypeError("{} doesn't exist or isn't a directory.".format(dir))
     return dir
+
+
+def check_username(username):
+    api_params = {
+        "method": "user.getinfo",
+        "user": username,
+        "format": "json"
+    }
+    try:
+        data = Lastfm.call_api(api_params, max_attempts=1)
+    except Lastfm.APIException as e:
+        err_print("Couldn't validate username:", e.response.get("message", "Unknown API exception"))
+        sys.exit(2)
 
 
 DEFAULT_SETTINGS = {
@@ -140,13 +154,23 @@ def main():
         if settings.verbosity > 0:
             logging.getLogger().setLevel('DEBUG')
 
+        check_username(settings.username)
+
         scrobc = ScrobblingCollection(settings.username, settings.database)
 
         mfilec = MusicFileCollection()
         for dir in settings.music_dirs:
             mfilec.scan_directory(dir)
 
+        if len(mfilec) == 0:
+            err_print("No music files were found.")
+            sys.exit(0)
+
         scrobc.sync()
+
+        if len(scrobc) == 0:
+            err_print("No scrobblings were found.")
+            sys.exit(0)
 
         songrank = SongRank(mfilec, scrobc)
         playlist = songrank.generate_playlist(settings.max_size)

@@ -111,6 +111,10 @@ class ScrobblingCollection():
     def __del__(self):
         self.db.close()
 
+    def __len__(self):
+        return len(self.all)
+
+
 
 class Lastfm():
 
@@ -119,7 +123,9 @@ class Lastfm():
     TIMEOUT = 10
 
     class APIException(Exception):
-        pass
+
+        def __init__(self, response={}):
+            self.response = response
 
     @classmethod
     def get_recent_tracks(cls, username, starting_from=0):
@@ -137,7 +143,7 @@ class Lastfm():
             try:
                 data = cls.call_api(api_params)
             except Lastfm.APIException:
-                logging.error("Failed API call.")
+                logging.errors("Failed API call.")
                 logging.error("Aborting sync, will work with whatever we have.")
                 break
 
@@ -187,19 +193,24 @@ class Lastfm():
     @classmethod
     def call_api(cls, params, max_attempts=10):
         params["api_key"] = cls.API_KEY
+        error_response = {}
         for i in range(max_attempts):
             if i > 1:
-                logging.error("Retrying...")
+                logging.debug("Retrying...")
             try:
                 r = requests.get(cls.API_URL, params=params, timeout=(cls.TIMEOUT, cls.TIMEOUT))
                 if r.status_code != requests.codes.ok:
-                    logging.error("API HTTP error {} - {}".format(r.status_code, r.reason))
+                    logging.debug("API HTTP error {} - {}".format(r.status_code, r.reason))
                     continue
                 json = r.json()
                 if "error" in json:
-                    logging.error("API error {} - {}".format(json["error"], json["messages"]))
+                    logging.debug("API error {} - {}".format(
+                        json.get("error", "Unknown"),
+                        json.get("message", "Unknown")
+                    ))
+                    error_response = json
                 else:
                     return json
             except requests.exceptions.Timeout:
                 logging.error("API call timed out.")
-        raise Lastfm.APIException()
+        raise Lastfm.APIException(error_response)

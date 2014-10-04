@@ -155,6 +155,9 @@ class MusicFileCollection():
                 except MusicFile.UnknownFormat:
                     logging.debug("Not a music file {}-".format(filename))
 
+    def __len__(self):
+        return len(self.all_files)
+
 
 class Playlist():
     """A collection of music files that keeps the order in which they are added"""
