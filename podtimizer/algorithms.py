@@ -54,7 +54,6 @@ class Matcher():
         # Try direct track mbid match
         track_mbid = scrob.track_mbid
         if track_mbid is not None and track_mbid in self.mfilec.tracks_by_mbid:
-            print("got match via mbid")
             return self.mfilec.tracks_by_mbid[track_mbid]
 
         # Try normalized Artist,Album,Track search
@@ -65,7 +64,6 @@ class Matcher():
             .get(scrob.track_norm, None)
         )
         if result is not None:
-            print("got match via text equality")
             return result
 
         # Search all files and retrieve the most likely match, if any
@@ -107,10 +105,6 @@ class Matcher():
 
         (distance, __, candidate) = candidates[0]
         candidate = candidate if distance < Matcher.MAX_EDIT_DISTANCE else None
-        if candidate is None:
-            print("unmatched scrobbling ", scrob)
-        else:
-            print("matched {} to {}".format(str(scrob), candidate.filename))
 
 
 class TimeAverage():
@@ -130,7 +124,6 @@ class TimeAverage():
             avg = sum(map(lambda s: TimeAverage.decay((today - s.date).days + 1), scrobs))
             avg = avg * 100 * TimeAverage.multiply(len(scrobs))
             self.timeavg_dict[mfile] = avg
-            print(mfile.filename, avg)
 
 
 class SongRank():
