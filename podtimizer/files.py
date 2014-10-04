@@ -19,7 +19,7 @@ from collections import deque
 import logging
 import os
 
-import mutagenx as mutagen
+import mutagen
 
 from podtimizer.utils import normalize, validate_mbid
 
