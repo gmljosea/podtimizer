@@ -25,7 +25,7 @@ import heapq
 import Levenshtein as lev
 
 from podtimizer.files import Playlist
-from podtimizer.utils import empty
+from podtimizer.utils import empty, err_print
 
 
 class Matcher():
@@ -128,7 +128,9 @@ class TimeAverage():
 
 class SongRank():
     def __init__(self, mfilec, scrobc):
+        err_print("Matching scrobblings to local music files...")
         self.matcher = Matcher(mfilec, scrobc)
+        err_print("Ranking music files...")
         self.timeavg = TimeAverage(self.matcher)
 
         self.mfilec = mfilec

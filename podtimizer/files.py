@@ -21,7 +21,7 @@ import os
 
 import mutagen
 
-from podtimizer.utils import normalize, validate_mbid
+from podtimizer.utils import normalize, validate_mbid, err_print
 
 
 class MusicFile():
@@ -144,7 +144,9 @@ class MusicFileCollection():
         Recursively finds all files under directory and adds them to the collection if a MusicFile
         instance can be created for them.
         """
+        err_print("Scanning", directory, "for music files.")
         for root, __, filenames in os.walk(directory):
+            err_print("-- Scanning", root)
             for filename in filenames:
                 try:
                     self.add_file(MusicFile(os.path.join(root, filename)))

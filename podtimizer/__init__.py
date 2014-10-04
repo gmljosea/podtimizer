@@ -26,7 +26,7 @@ from podtimizer.files import MusicFileCollection
 from podtimizer.scrobblings import ScrobblingCollection
 from podtimizer.algorithms import SongRank
 
-__version__ = "0.1"
+__version__ = "0.2.dev"
 
 SIZE_UNITS = {
     "K": 1024,
@@ -110,6 +110,13 @@ class Settings():
             action='version',
             version="podtimizer %s" % __version__
         )
+        parser.add_argument(
+            '-v', '--verbose',
+            action='count',
+            default=0,
+            dest="VERBOSITY",
+            help="make output very verbose"
+        )
         self.settings.update(vars(parser.parse_args()))
 
     def __getattr__(self, name):
@@ -121,11 +128,13 @@ class Settings():
 
 def main():
     settings = Settings()
-    logging.getLogger().setLevel('INFO')
+
+    if settings.verbosity > 0:
+        logging.getLogger().setLevel('DEBUG')
 
     scrobc = ScrobblingCollection(settings.username, settings.database)
-    mfilec = MusicFileCollection()
 
+    mfilec = MusicFileCollection()
     for dir in settings.music_dirs:
         mfilec.scan_directory(dir)
 

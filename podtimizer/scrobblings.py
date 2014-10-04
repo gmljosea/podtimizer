@@ -24,7 +24,7 @@ import sqlite3
 
 from pytz import utc
 
-from podtimizer.utils import normalize
+from podtimizer.utils import normalize, err_print
 
 
 SCROBBLING_SCHEMA_SQL = """
@@ -95,7 +95,7 @@ class ScrobblingCollection():
         return r[0] if r is not None else 0
 
     def sync(self):
-        logging.info("Starting scrobblings sync for user '{}'".format(self.username))
+        err_print("Starting scrobblings sync for user", self.username)
         last_date = self.get_most_recent_date()
 
         for scrobbling in Lastfm.get_recent_tracks(starting_from=last_date, username=self.username):
@@ -106,6 +106,7 @@ class ScrobblingCollection():
             except sqlite3.IntegrityError:
                 logging.debug("Skipping duplicate scrobbling {}".format(scrobbling))
             self.db.commit()
+        err_print("Finished sync")
 
     def __del__(self):
         self.db.close()
@@ -141,7 +142,8 @@ class Lastfm():
                 break
 
             if "recenttracks" not in data:
-                logging.error("Unexpected response format from Last.fm: {}".format(data))
+                logging.error("Unexpected response format from Last.fm")
+                logging.debug("Last.fm returned {}".format(data))
                 logging.error("Aborting sync, will work with whatever we have.")
                 break
 
@@ -149,7 +151,7 @@ class Lastfm():
                 break
 
             tracks_left = data["recenttracks"]["@attr"]["total"]
-            logging.info("{} scrobblings left to sync.".format(tracks_left))
+            err_print(tracks_left, "scrobblings left to sync")
 
             if not isinstance(data["recenttracks"]["track"], list):
                 data["recenttracks"]["track"] = [data["recenttracks"]["track"]]
@@ -170,7 +172,7 @@ class Lastfm():
                 date = int(track_data.get("date", {}).get("uts", 0))
 
                 if date == 0 or (track is None and track_mbid is None):
-                    logging.error("Skipping scrobbling with insufficient metadata.")
+                    logging.debug("Skipping scrobbling with insufficient metadata.")
                     continue
 
                 api_params["from"] = date

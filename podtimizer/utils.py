@@ -16,6 +16,7 @@
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 
 import re
+import sys
 import uuid
 
 
@@ -48,3 +49,7 @@ def validate_mbid(mbid):
         return str(uuid.UUID(mbid.strip()))
     except ValueError:
         return None
+
+
+def err_print(*args):
+    print(*args, file=sys.stderr)
