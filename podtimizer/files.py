@@ -60,26 +60,26 @@ class MusicFile():
         MusicFile.InsufficientMetadata exception will be thrown.
         """
         try:
-            self.metadata = mutagen.File(filename, easy=True)
+            metadata = mutagen.File(filename, easy=True)
         except mutagen.mp3.HeaderNotFoundError:
             raise MusicFile.UnknownFormat()
 
-        if self.metadata is None:
+        if metadata is None:
             raise MusicFile.UnknownFormat()
 
         self.filename = filename
         self.size = os.path.getsize(filename)
 
-        self.artist = self.extract_tag("artist")
-        self.artist_mbid = self.check_mbid(self.extract_tag("musicbrainz_artistid"))
+        self.artist = MusicFile.extract_tag(metadata, "artist")
+        self.artist_mbid = self.check_mbid(MusicFile.extract_tag(metadata, "musicbrainz_artistid"))
         self.artist_norm = normalize(self.artist)
 
-        self.album = self.extract_tag("album")
-        self.album_mbid = self.check_mbid(self.extract_tag("musicbrainz_albumid"))
+        self.album = MusicFile.extract_tag(metadata, "album")
+        self.album_mbid = self.check_mbid(MusicFile.extract_tag(metadata, "musicbrainz_albumid"))
         self.album_norm = normalize(self.album)
 
-        self.track = self.extract_tag("title")
-        self.track_mbid = self.check_mbid(self.extract_tag("musicbrainz_trackid"))
+        self.track = MusicFile.extract_tag(metadata, "title")
+        self.track_mbid = self.check_mbid(MusicFile.extract_tag(metadata, "musicbrainz_trackid"))
         self.track_norm = normalize(self.track)
 
         if self.track is None and self.track_mbid is None:
@@ -87,7 +87,7 @@ class MusicFile():
 
         # Careful here. Mutagen right now includes a info property in all its formats, and each
         # of them includes a length field in seconds (except ASF files, whatever they are)
-        self.length = self.metadata.info.length
+        self.length = metadata.info.length
 
     @property
     def name_normalized(self):
@@ -101,8 +101,8 @@ class MusicFile():
     def mbid(self):
         return self.track_mbid
 
-    def extract_tag(self, tag):
-        meta = self.metadata
+    @staticmethod
+    def extract_tag(meta, tag):
         return meta[tag][0] if tag in meta and len(meta[tag]) > 0 else None
 
     def check_mbid(self, mbid):
