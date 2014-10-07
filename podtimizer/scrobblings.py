@@ -154,13 +154,13 @@ class Lastfm():
                 data = cls.call_api(api_params)
             except Lastfm.APIException:
                 logging.errors("Failed API call.")
-                logging.error("Aborting sync, will work with whatever we have.")
+                err_print("API Error, aborting sync. Will work with whatever we have.")
                 break
 
             if "recenttracks" not in data:
                 logging.error("Unexpected response format from Last.fm")
                 logging.debug("Last.fm returned {}".format(data))
-                logging.error("Aborting sync, will work with whatever we have.")
+                err_print("Aborting sync, will work with whatever we have.")
                 break
 
             if "@attr" not in data["recenttracks"]:
