@@ -1,5 +1,5 @@
 # podtimizer, Last.fm-based playlist generator
-# Copyright (C) 2014 José Alberto Goncalves Da Silva (gmljosea)
+# Copyright (C) 2014 Jose Alberto Goncalves Da Silva (gmljosea)
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License
@@ -15,12 +15,15 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 
+from __future__ import unicode_literals
+
 from collections import deque
 from datetime import datetime
 import logging
 import os
 import requests
 import sqlite3
+import sys
 
 from pytz import utc
 
@@ -64,13 +67,14 @@ class Scrobbling():
         self.track_mbid = track_mbid
 
         self.date = datetime.fromtimestamp(date, utc)
+        self.date_timestamp = date
 
     def row(self):
         return (
             self.artist, self.artist_mbid,
             self.album, self.album_mbid,
             self.track, self.track_mbid,
-            self.date.timestamp()
+            self.date_timestamp
         )
 
     def __str__(self):
@@ -82,7 +86,13 @@ class ScrobblingCollection():
     def __init__(self, username, db_format):
         self.username = username
         self.db_name = db_format.format(username)
-        os.makedirs(os.path.split(self.db_name)[0], exist_ok=True)
+        db_path =os.path.split(self.db_name)[0]
+        if not os.path.exists(db_path):
+            try:
+                os.makedirs(db_path)
+            except OSError:
+                logging.critical("Couldn't create dir for the cached scrobblings database")
+                sys.exit(-1)
         self.db = sqlite3.connect(self.db_name, detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
         self.db.execute(SCROBBLING_SCHEMA_SQL)
         self.all = deque()

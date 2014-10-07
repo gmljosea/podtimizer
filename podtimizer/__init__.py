@@ -1,5 +1,5 @@
 # podtimizer, Last.fm-based playlist generator
-# Copyright (C) 2014 José Alberto Goncalves Da Silva (gmljosea)
+# Copyright (C) 2014 Jose Alberto Goncalves Da Silva (gmljosea)
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License
@@ -15,7 +15,10 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 
+from __future__ import unicode_literals
+
 import argparse
+import codecs
 import logging
 import os
 import re
@@ -64,7 +67,7 @@ def check_dir(dir):
 
 def open_output(path):
     try:
-        return open(path, mode="w")
+        return codecs.open(path, mode="w", encoding="utf8")
     except OSError as e:
         raise argparse.ArgumentTypeError("Couldn't open output file: {}".format(str(e)))
 
