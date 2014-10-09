@@ -19,6 +19,7 @@ from __future__ import unicode_literals, division
 
 from datetime import datetime
 from math import sqrt
+import logging
 
 import pytz
 
@@ -41,6 +42,12 @@ class Matcher():
         self.scrobble_to_mfile = {}
         self.unmatched_scrobblings = deque()
 
+        # stats
+        self.matched_by_mbid = 0
+        self.matched_by_text = 0
+        self.matched_by_distance = 0
+        self.unmatched = 0
+
         for scrob in scrobc.all:
             mfile = self.match(scrob)
             if mfile is not None:
@@ -49,6 +56,7 @@ class Matcher():
                 self.scrobble_to_mfile[scrob] = mfile
             else:
                 self.unmatched_scrobblings.append(scrob)
+                self.unmatched += 1
                 self.scrobble_to_mfile[scrob] = None
 
     def match(self, scrob):
@@ -56,6 +64,7 @@ class Matcher():
         # Try direct track mbid match
         track_mbid = scrob.track_mbid
         if track_mbid is not None and track_mbid in self.mfilec.tracks_by_mbid:
+            self.matched_by_mbid += 1
             return self.mfilec.tracks_by_mbid[track_mbid]
 
         # Try normalized Artist,Album,Track search
@@ -66,6 +75,7 @@ class Matcher():
             .get(scrob.track_norm, None)
         )
         if result is not None:
+            self.matched_by_text += 1
             return result
 
         # Search all files and retrieve the most likely match, if any
@@ -86,17 +96,14 @@ class Matcher():
             mfile_artist, scrob_artist = empty(mfile.artist_norm), empty(scrob.artist_norm)
             artist_dist = lev.distance(mfile_artist, scrob_artist)
             artist_dist *= 1 - lev.jaro_winkler(mfile_artist, scrob_artist)
-            artist_dist *= 1 - lev.ratio(mfile_artist, scrob_artist)
 
             mfile_album, scrob_album = empty(mfile.album_norm), empty(scrob.album_norm)
             album_dist = lev.distance(mfile_album, scrob_album)
             album_dist *= 1 - lev.jaro_winkler(mfile_album, scrob_album)
-            album_dist *= 1 - lev.ratio(mfile_album, scrob_album)
 
             mfile_track, scrob_track = empty(mfile.track_norm), empty(scrob.track_norm)
             track_dist = lev.distance(mfile_track, scrob_track)
             track_dist *= 1 - lev.jaro_winkler(mfile_track, scrob_track)
-            track_dist *= 1 - lev.ratio(mfile_track, scrob_track)
 
             distance = artist_dist + album_dist + track_dist
 
@@ -106,7 +113,24 @@ class Matcher():
             count += 1
 
         (distance, __, candidate) = candidates[0]
-        candidate = candidate if distance < Matcher.MAX_EDIT_DISTANCE else None
+        if distance < Matcher.MAX_EDIT_DISTANCE:
+            self.matched_by_distance += 1
+            logging.debug("Matched {} to {}".format(scrob, candidate))
+
+            # Last resort. In edge cases, the best candidate might actually be the correct file,
+            # but might have a distance larger than maximum. Here we do additional tests over the
+            # best candidate and determine wether to match to it or not.
+
+            # Cases:
+            # - The track name actually includes the band's name before the actual track name.
+            #   If the normalized scrobbling artist+track name is very similar to the normalized
+            #   music file artist+track name, match it.
+            # -
+            return candidate
+        else:
+            logging.debug("Unmatched scrobbling {}".format(scrob))
+            logging.debug("Best candidate was {} with {}".format(candidate, distance))
+            return None
 
 
 class TimeAverage():
@@ -132,6 +156,10 @@ class SongRank():
     def __init__(self, mfilec, scrobc):
         err_print("Matching scrobblings to local music files...")
         self.matcher = Matcher(mfilec, scrobc)
+        logging.debug("Matched {} using track MBID".format(self.matcher.matched_by_mbid))
+        logging.debug("Matched {} using track text metadata".format(self.matcher.matched_by_text))
+        logging.debug("Matched {} using track string distance".format(self.matcher.matched_by_distance))
+        logging.debug("{} unmatched".format(self.matcher.unmatched))
         err_print("Ranking music files...")
         self.timeavg = TimeAverage(self.matcher)
 
