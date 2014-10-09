@@ -93,7 +93,12 @@ class ScrobblingCollection():
             except OSError:
                 logging.critical("Couldn't create dir for the cached scrobblings database")
                 sys.exit(-1)
-        self.db = sqlite3.connect(self.db_name, detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
+        self.db = sqlite3.connect(
+            self.db_name,
+            detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES,
+            isolation_level=None
+        )
+        self.db.execute("PRAGMA synchronous = 0")
         self.db.execute(SCROBBLING_SCHEMA_SQL)
         self.all = deque()
 
@@ -115,7 +120,7 @@ class ScrobblingCollection():
                 self.all.append(scrobbling)
             except sqlite3.IntegrityError:
                 logging.debug("Skipping duplicate scrobbling {}".format(scrobbling))
-            self.db.commit()
+        self.db.commit()
         err_print("Finished sync")
 
     def __del__(self):
