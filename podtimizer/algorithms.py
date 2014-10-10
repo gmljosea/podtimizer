@@ -33,7 +33,7 @@ from podtimizer.utils import empty, err_print
 
 class Matcher():
 
-    MAX_EDIT_DISTANCE = 1.5
+    MAX_EDIT_DISTANCE = 2.0
 
     def __init__(self, mfilec, scrobc):
         self.mfilec = mfilec
@@ -95,17 +95,28 @@ class Matcher():
 
             mfile_artist, scrob_artist = empty(mfile.artist_norm), empty(scrob.artist_norm)
             artist_dist = lev.distance(mfile_artist, scrob_artist)
-            artist_dist *= 1 - lev.jaro_winkler(mfile_artist, scrob_artist)
+            artist_dist *= 1.1 - lev.jaro_winkler(mfile_artist, scrob_artist)
 
             mfile_album, scrob_album = empty(mfile.album_norm), empty(scrob.album_norm)
             album_dist = lev.distance(mfile_album, scrob_album)
-            album_dist *= 1 - lev.jaro_winkler(mfile_album, scrob_album)
+            album_dist *= 1.1 - lev.jaro_winkler(mfile_album, scrob_album)
 
             mfile_track, scrob_track = empty(mfile.track_norm), empty(scrob.track_norm)
             track_dist = lev.distance(mfile_track, scrob_track)
-            track_dist *= 1 - lev.jaro_winkler(mfile_track, scrob_track)
+            track_dist *= 1.1 - lev.jaro_winkler(mfile_track, scrob_track)
 
-            distance = artist_dist + album_dist + track_dist
+            # The jaro-winkler metric is used to make strings with very similar prefixes closer
+            # in distance. The closer the prefix, the closer the metric is to 1, and in consequence
+            # the levenshtein distance will be scaled down.
+            # The constant is 1.1 instead of 1 because when the strings have a very long common
+            # prefix, jaro-winkler becomes 1.0. This makes two songs that are actually different,
+            # but only differ by something minuscule at the end of the name, have a metric of 1.0,
+            # which results in scaling levenshtein by 0. The .1 ensures the result is never 0 and
+            # forces levenshtein to always be relevant.
+
+            distance = 0.4 * artist_dist + 0.2 * album_dist + 0.4 * track_dist
+            # Album distance is given less weight because often one song may appear in multiple
+            # albums. Say, a regular album and a EP. We want both to be considered the same song.
 
             # The count is included in the heap to avoid heapq trying to compare for equality
             # two MusicFile instances if both have the same distance.
