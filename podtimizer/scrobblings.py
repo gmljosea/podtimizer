@@ -228,4 +228,6 @@ class Lastfm():
                     return json
             except requests.exceptions.Timeout:
                 logging.error("API call timed out.")
+            except requests.exceptions.ConnectionError:
+                logging.error("API call failed.")
         raise Lastfm.APIException(error_response)
