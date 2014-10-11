@@ -178,7 +178,7 @@ class Lastfm():
             try:
                 data = cls.call_api(api_params)
             except Lastfm.APIException:
-                logging.errors("Failed API call.")
+                logging.error("Failed API call.")
                 err_print("API Error, aborting sync. Will work with whatever we have.")
                 break
 

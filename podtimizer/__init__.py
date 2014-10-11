@@ -29,7 +29,7 @@ from podtimizer.scrobblings import ScrobblingCollection, Lastfm
 from podtimizer.algorithms import SongRank
 from podtimizer.utils import err_print
 
-__version__ = "0.2"
+__version__ = "0.3.dev"
 
 SIZE_UNITS = {
     "K": 1024,
@@ -78,7 +78,7 @@ def check_username(username):
         "format": "json"
     }
     try:
-        data = Lastfm.call_api(api_params, max_attempts=1)
+        Lastfm.call_api(api_params, max_attempts=1)
     except Lastfm.APIException as e:
         err_print("Couldn't validate username:", e.response.get("message", "Unknown API exception"))
         sys.exit(2)
