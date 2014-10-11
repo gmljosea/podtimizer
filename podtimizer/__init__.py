@@ -29,7 +29,7 @@ from podtimizer.scrobblings import ScrobblingCollection, Lastfm
 from podtimizer.algorithms import SongRank
 from podtimizer.utils import err_print
 
-__version__ = "0.2.dev"
+__version__ = "0.2"
 
 SIZE_UNITS = {
     "K": 1024,
