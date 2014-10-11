@@ -1,5 +1,5 @@
 # podtimizer, Last.fm-based playlist generator
-# Copyright (C) 2014 José Alberto Goncalves Da Silva (gmljosea)
+# Copyright (C) 2014 Jose Alberto Goncalves Da Silva (gmljosea)
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License
@@ -15,16 +15,19 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 
+from __future__ import unicode_literals
+
 from collections import deque
 from datetime import datetime
 import logging
 import os
 import requests
 import sqlite3
+import sys
 
 from pytz import utc
 
-from podtimizer.utils import normalize
+from podtimizer.utils import normalize, err_print
 
 
 SCROBBLING_SCHEMA_SQL = """
@@ -64,13 +67,14 @@ class Scrobbling():
         self.track_mbid = track_mbid
 
         self.date = datetime.fromtimestamp(date, utc)
+        self.date_timestamp = date
 
     def row(self):
         return (
             self.artist, self.artist_mbid,
             self.album, self.album_mbid,
             self.track, self.track_mbid,
-            self.date.timestamp()
+            self.date_timestamp
         )
 
     def __str__(self):
@@ -81,21 +85,52 @@ class ScrobblingCollection():
 
     def __init__(self, username, db_format):
         self.username = username
-        self.db_name = db_format.format(username)
-        os.makedirs(os.path.split(self.db_name)[0], exist_ok=True)
-        self.db = sqlite3.connect(self.db_name, detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
-        self.db.execute(SCROBBLING_SCHEMA_SQL)
+        self._setup_db(db_format.format(username))
         self.all = deque()
 
         for row in self.db.execute(ALL_SCROBBLINGS_SQL):
             self.all.append(Scrobbling(*tuple(row)))
+
+    def _setup_db(self, db_name):
+        db_path = os.path.split(db_name)[0]
+        if not os.path.exists(db_path):
+            try:
+                os.makedirs(db_path)
+            except OSError:
+                logging.critical("Couldn't create dir for the cached scrobblings database")
+                sys.exit(-1)
+        try:
+            self._connect_to_db(db_name)
+            return
+        except sqlite3.DatabaseError as e:
+            logging.error("Database error, deleting and retrying.")
+
+        try:
+            os.remove(db_name)
+            self._connect_to_db(db_name)
+        except OSError:
+            logging.critical("Couldn't delete {}, aborting.".format(db_name))
+            sys.exit(-1)
+        except sqlite3.DatabaseError as e:
+            logging.critical("Couldn't create new database in {}, aborting.".format(db_name))
+            sys.exit(-1)
+
+    def _connect_to_db(self, db_name):
+        self.db = sqlite3.connect(
+            db_name,
+            detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES,
+            isolation_level=None
+        )
+        self.db.execute("PRAGMA synchronous = 0")
+        self.db.execute(SCROBBLING_SCHEMA_SQL)
+
 
     def get_most_recent_date(self):
         r = self.db.execute(LAST_DATE_SQL).fetchone()
         return r[0] if r is not None else 0
 
     def sync(self):
-        logging.info("Starting scrobblings sync for user '{}'".format(self.username))
+        err_print("Starting scrobblings sync for user", self.username)
         last_date = self.get_most_recent_date()
 
         for scrobbling in Lastfm.get_recent_tracks(starting_from=last_date, username=self.username):
@@ -105,10 +140,15 @@ class ScrobblingCollection():
                 self.all.append(scrobbling)
             except sqlite3.IntegrityError:
                 logging.debug("Skipping duplicate scrobbling {}".format(scrobbling))
-            self.db.commit()
+        self.db.commit()
+        err_print("Finished sync")
 
     def __del__(self):
         self.db.close()
+
+    def __len__(self):
+        return len(self.all)
+
 
 
 class Lastfm():
@@ -118,7 +158,9 @@ class Lastfm():
     TIMEOUT = 10
 
     class APIException(Exception):
-        pass
+
+        def __init__(self, response={}):
+            self.response = response
 
     @classmethod
     def get_recent_tracks(cls, username, starting_from=0):
@@ -136,20 +178,21 @@ class Lastfm():
             try:
                 data = cls.call_api(api_params)
             except Lastfm.APIException:
-                logging.error("Failed API call.")
-                logging.error("Aborting sync, will work with whatever we have.")
+                logging.errors("Failed API call.")
+                err_print("API Error, aborting sync. Will work with whatever we have.")
                 break
 
             if "recenttracks" not in data:
-                logging.error("Unexpected response format from Last.fm: {}".format(data))
-                logging.error("Aborting sync, will work with whatever we have.")
+                logging.error("Unexpected response format from Last.fm")
+                logging.debug("Last.fm returned {}".format(data))
+                err_print("Aborting sync, will work with whatever we have.")
                 break
 
             if "@attr" not in data["recenttracks"]:
                 break
 
             tracks_left = data["recenttracks"]["@attr"]["total"]
-            logging.info("{} scrobblings left to sync.".format(tracks_left))
+            err_print(tracks_left, "scrobblings left to sync")
 
             if not isinstance(data["recenttracks"]["track"], list):
                 data["recenttracks"]["track"] = [data["recenttracks"]["track"]]
@@ -170,7 +213,7 @@ class Lastfm():
                 date = int(track_data.get("date", {}).get("uts", 0))
 
                 if date == 0 or (track is None and track_mbid is None):
-                    logging.error("Skipping scrobbling with insufficient metadata.")
+                    logging.debug("Skipping scrobbling with insufficient metadata.")
                     continue
 
                 api_params["from"] = date
@@ -185,19 +228,26 @@ class Lastfm():
     @classmethod
     def call_api(cls, params, max_attempts=10):
         params["api_key"] = cls.API_KEY
+        error_response = {}
         for i in range(max_attempts):
             if i > 1:
-                logging.error("Retrying...")
+                logging.debug("Retrying...")
             try:
                 r = requests.get(cls.API_URL, params=params, timeout=(cls.TIMEOUT, cls.TIMEOUT))
                 if r.status_code != requests.codes.ok:
-                    logging.error("API HTTP error {} - {}".format(r.status_code, r.reason))
+                    logging.debug("API HTTP error {} - {}".format(r.status_code, r.reason))
                     continue
                 json = r.json()
                 if "error" in json:
-                    logging.error("API error {} - {}".format(json["error"], json["messages"]))
+                    logging.debug("API error {} - {}".format(
+                        json.get("error", "Unknown"),
+                        json.get("message", "Unknown")
+                    ))
+                    error_response = json
                 else:
                     return json
             except requests.exceptions.Timeout:
                 logging.error("API call timed out.")
-        raise Lastfm.APIException()
+            except requests.exceptions.ConnectionError:
+                logging.error("API call failed.")
+        raise Lastfm.APIException(error_response)

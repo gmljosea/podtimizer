@@ -1,5 +1,5 @@
 # podtimizer, Last.fm-based playlist generator
-# Copyright (C) 2014 José Alberto Goncalves Da Silva (gmljosea)
+# Copyright (C) 2014 Jose Alberto Goncalves Da Silva (gmljosea)
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License
@@ -15,13 +15,15 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 
+from __future__ import unicode_literals
+
 from collections import deque
 import logging
 import os
 
-import mutagenx as mutagen
+import mutagen
 
-from podtimizer.utils import normalize, validate_mbid
+from podtimizer.utils import normalize, validate_mbid, err_print
 
 
 class MusicFile():
@@ -60,26 +62,26 @@ class MusicFile():
         MusicFile.InsufficientMetadata exception will be thrown.
         """
         try:
-            self.metadata = mutagen.File(filename, easy=True)
+            metadata = mutagen.File(filename, easy=True)
         except mutagen.mp3.HeaderNotFoundError:
             raise MusicFile.UnknownFormat()
 
-        if self.metadata is None:
+        if metadata is None:
             raise MusicFile.UnknownFormat()
 
         self.filename = filename
         self.size = os.path.getsize(filename)
 
-        self.artist = self.extract_tag("artist")
-        self.artist_mbid = self.check_mbid(self.extract_tag("musicbrainz_artistid"))
+        self.artist = MusicFile.extract_tag(metadata, "artist")
+        self.artist_mbid = self.check_mbid(MusicFile.extract_tag(metadata, "musicbrainz_artistid"))
         self.artist_norm = normalize(self.artist)
 
-        self.album = self.extract_tag("album")
-        self.album_mbid = self.check_mbid(self.extract_tag("musicbrainz_albumid"))
+        self.album = MusicFile.extract_tag(metadata, "album")
+        self.album_mbid = self.check_mbid(MusicFile.extract_tag(metadata, "musicbrainz_albumid"))
         self.album_norm = normalize(self.album)
 
-        self.track = self.extract_tag("title")
-        self.track_mbid = self.check_mbid(self.extract_tag("musicbrainz_trackid"))
+        self.track = MusicFile.extract_tag(metadata, "title")
+        self.track_mbid = self.check_mbid(MusicFile.extract_tag(metadata, "musicbrainz_trackid"))
         self.track_norm = normalize(self.track)
 
         if self.track is None and self.track_mbid is None:
@@ -87,7 +89,7 @@ class MusicFile():
 
         # Careful here. Mutagen right now includes a info property in all its formats, and each
         # of them includes a length field in seconds (except ASF files, whatever they are)
-        self.length = self.metadata.info.length
+        self.length = metadata.info.length
 
     @property
     def name_normalized(self):
@@ -101,8 +103,8 @@ class MusicFile():
     def mbid(self):
         return self.track_mbid
 
-    def extract_tag(self, tag):
-        meta = self.metadata
+    @staticmethod
+    def extract_tag(meta, tag):
         return meta[tag][0] if tag in meta and len(meta[tag]) > 0 else None
 
     def check_mbid(self, mbid):
@@ -144,7 +146,9 @@ class MusicFileCollection():
         Recursively finds all files under directory and adds them to the collection if a MusicFile
         instance can be created for them.
         """
+        err_print("Scanning", directory, "for music files.")
         for root, __, filenames in os.walk(directory):
+            err_print("-- Scanning", root)
             for filename in filenames:
                 try:
                     self.add_file(MusicFile(os.path.join(root, filename)))
@@ -152,6 +156,9 @@ class MusicFileCollection():
                     logging.debug("Skipping {} due to insufficient metadata.".format(filename))
                 except MusicFile.UnknownFormat:
                     logging.debug("Not a music file {}-".format(filename))
+
+    def __len__(self):
+        return len(self.all_files)
 
 
 class Playlist():

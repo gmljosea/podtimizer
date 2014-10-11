@@ -1,5 +1,5 @@
 # podtimizer, Last.fm-based playlist generator
-# Copyright (C) 2014 José Alberto Goncalves Da Silva (gmljosea)
+# Copyright (C) 2014 Jose Alberto Goncalves Da Silva (gmljosea)
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License
@@ -15,7 +15,10 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 
+from __future__ import print_function, unicode_literals
+
 import re
+import sys
 import uuid
 
 
@@ -48,3 +51,7 @@ def validate_mbid(mbid):
         return str(uuid.UUID(mbid.strip()))
     except ValueError:
         return None
+
+
+def err_print(*args):
+    print(*args, file=sys.stderr)
