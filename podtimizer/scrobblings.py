@@ -27,7 +27,7 @@ import sys
 
 from pytz import utc
 
-from podtimizer.utils import normalize, err_print
+from podtimizer.utils import normalize, err_print, make_database
 
 
 SCROBBLING_SCHEMA_SQL = """
@@ -85,45 +85,11 @@ class ScrobblingCollection():
 
     def __init__(self, username, db_format):
         self.username = username
-        self._setup_db(db_format.format(username))
+        self.db = make_database(db_format.format(username), SCROBBLING_SCHEMA_SQL)
         self.all = deque()
 
         for row in self.db.execute(ALL_SCROBBLINGS_SQL):
             self.all.append(Scrobbling(*tuple(row)))
-
-    def _setup_db(self, db_name):
-        db_path = os.path.split(db_name)[0]
-        if not os.path.exists(db_path):
-            try:
-                os.makedirs(db_path)
-            except OSError:
-                logging.critical("Couldn't create dir for the cached scrobblings database")
-                sys.exit(-1)
-        try:
-            self._connect_to_db(db_name)
-            return
-        except sqlite3.DatabaseError as e:
-            logging.error("Database error, deleting and retrying.")
-
-        try:
-            os.remove(db_name)
-            self._connect_to_db(db_name)
-        except OSError:
-            logging.critical("Couldn't delete {}, aborting.".format(db_name))
-            sys.exit(-1)
-        except sqlite3.DatabaseError as e:
-            logging.critical("Couldn't create new database in {}, aborting.".format(db_name))
-            sys.exit(-1)
-
-    def _connect_to_db(self, db_name):
-        self.db = sqlite3.connect(
-            db_name,
-            detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES,
-            isolation_level=None
-        )
-        self.db.execute("PRAGMA synchronous = 0")
-        self.db.execute(SCROBBLING_SCHEMA_SQL)
-
 
     def get_most_recent_date(self):
         r = self.db.execute(LAST_DATE_SQL).fetchone()

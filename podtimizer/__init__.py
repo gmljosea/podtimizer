@@ -85,7 +85,8 @@ def check_username(username):
 
 
 DEFAULT_SETTINGS = {
-    'DATABASE': os.path.expanduser('~/.podtimizer/db/{}_scrobblings.db.sqlite3')
+    'DATABASE': os.path.expanduser('~/.podtimizer/db/{}_scrobblings.db.sqlite3'),
+    'MUSIC_CACHE': os.path.expanduser('~/.podtimizer/db/music_cache.db.sqlite3')
 }
 
 
@@ -166,7 +167,7 @@ def main():
 
         scrobc = ScrobblingCollection(settings.username, settings.database)
 
-        mfilec = MusicFileCollection()
+        mfilec = MusicFileCollection(settings.music_cache)
         for dir in settings.music_dirs:
             mfilec.scan_directory(dir)
 
