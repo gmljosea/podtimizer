@@ -27,7 +27,7 @@ import sqlite3
 
 import mutagen
 
-from podtimizer.utils import normalize, validate_mbid, err_print
+from podtimizer.utils import normalize, validate_mbid, err_print, make_database
 
 
 MUSIC_FILE_SCHEMA_SQL = """
@@ -47,37 +47,7 @@ class MetadataCache():
         pass
 
     def __init__(self, db_name):
-        db_path = os.path.split(db_name)[0]
-        if not os.path.exists(db_path):
-            try:
-                os.makedirs(db_path)
-            except OSError:
-                logging.critical("Couldn't create dir for the cached music files database")
-                sys.exit(-1)
-        try:
-            self._connect_to_db(db_name)
-            return
-        except sqlite3.DatabaseError:
-            logging.error("Database error, deleting and retrying.")
-
-        try:
-            os.remove(db_name)
-            self._connect_to_db(db_name)
-        except OSError:
-            logging.critical("Couldn't delete {}, aborting.".format(db_name))
-            sys.exit(-1)
-        except sqlite3.DatabaseError as e:
-            logging.critical("Couldn't create new database in {} due to {}, aborting.".format(db_name, e))
-            sys.exit(-1)
-
-    def _connect_to_db(self, db_name):
-        self.db = sqlite3.connect(
-            db_name,
-            detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES,
-            isolation_level=None
-        )
-        self.db.execute("PRAGMA synchronous = 0")
-        self.db.execute(MUSIC_FILE_SCHEMA_SQL)
+        self.db = make_database(db_name, MUSIC_FILE_SCHEMA_SQL)
 
     def get_file(self, filename, mtime):
         for row in self.db.execute(SELECT_MUSIC_FILE_SQL, (filename, )):
