@@ -84,9 +84,22 @@ def check_username(username):
         sys.exit(2)
 
 
+if sys.platform.startswith("linux"):
+    BASE_APPDATA_DIR = os.path.expanduser(os.path.join("~", ".podtimizer"))
+elif sys.platform.startswith("win32"):
+    BASE_APPDATA_DIR = os.path.join(os.environ["APPDATA"], "podtimizer")
+elif sys.platform.startswith("darwin"):
+    # FIXME? I'm not a mac user, I don't know if mac apps usually put their data here.
+    BASE_APPDATA_DIR = os.path.expanduser(os.path.join("~", ".podtimizer"))
+else:
+    err_print("Your platform '{}' is not supported.".format(sys.platform))
+    err_print("We support Linux, Windows and OS X")
+    sys.exit(-1)
+
+
 DEFAULT_SETTINGS = {
-    'DATABASE': os.path.expanduser('~/.podtimizer/db/{}_scrobblings.db.sqlite3'),
-    'MUSIC_CACHE': os.path.expanduser('~/.podtimizer/db/music_cache.db.sqlite3')
+    'DATABASE': os.path.join(BASE_APPDATA_DIR, "{}_scrobblings.db.sqlite3"),
+    'MUSIC_CACHE': os.path.join(BASE_APPDATA_DIR, "music_cache.db.sqlite3")
 }
 
 
