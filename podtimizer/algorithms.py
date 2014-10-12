@@ -97,7 +97,7 @@ class Matcher():
             return (scrob, result)
 
         # Search all files and retrieve the most likely match, if any
-        candidates, count = [], 0
+        candidate, distance = None, 0
         for mfile in self.mfilec.all_files:
             # Skip if artist mbid exist for both but don't match
             # Album mbid is skipped because it would be very weird to have the album mbid but NOT
@@ -132,16 +132,15 @@ class Matcher():
             # which results in scaling levenshtein by 0. The .1 ensures the result is never 0 and
             # forces levenshtein to always be relevant.
 
-            distance = 0.4 * artist_dist + 0.2 * album_dist + 0.4 * track_dist
+            mfile_distance = 0.4 * artist_dist + 0.2 * album_dist + 0.4 * track_dist
             # Album distance is given less weight because often one song may appear in multiple
             # albums. Say, a regular album and a EP. We want both to be considered the same song.
 
             # The count is included in the heap to avoid heapq trying to compare for equality
             # two MusicFile instances if both have the same distance.
-            heapq.heappush(candidates, (distance, count, mfile))
-            count += 1
+            if candidate is None or mfile_distance < distance:
+                candidate, distance = mfile, mfile_distance
 
-        (distance, __, candidate) = candidates[0]
         if distance < Matcher.MAX_EDIT_DISTANCE:
             self.matched_by_distance += 1
             logging.debug("Matched {} to {}".format(scrob, candidate))
