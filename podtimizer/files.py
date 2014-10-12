@@ -156,16 +156,23 @@ class MusicFileCollection():
     def __init__(self, cache_name):
         self.tracks_by_mbid = {}
         self.tracks_by_text = {}
+        self.library = {}
         self.all_files = deque()
         self.cache = MetadataCache(cache_name)
+        self.artist_mbid = {}
 
     def add_file(self, mfile):
         """Adds the MusicFile mfile to the collection"""
+        artist, album, track = mfile.name_normalized
         self.all_files.append(mfile)
-        self.tracks_by_text["{}{}{}".format(*mfile.name_normalized)] = mfile
+        self.tracks_by_text["{}{}{}".format(artist, album, track)] = mfile
+        self.library.setdefault(artist, {}).setdefault(album, {})[track] = mfile
 
         if mfile.mbid is not None:
             self.tracks_by_mbid[mfile.mbid] = mfile
+
+        if mfile.artist_mbid is not None:
+            self.artist_mbid[artist] = mfile.artist_mbid
 
 
     def scan_directory(self, directory):

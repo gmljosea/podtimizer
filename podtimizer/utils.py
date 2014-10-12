@@ -36,7 +36,7 @@ def normalize(name):
     It returns None if the argument is None, or if the argument only has whitespace.
     """
     if name is None or len(name.strip()) == 0:
-        return None
+        return ""
 
     name = name.strip().lower()
     name = re.sub(r"\s+\(feat. [^)]*\)", "", name, flags=re.IGNORECASE | re.UNICODE)
