@@ -114,15 +114,15 @@ class Matcher():
             ):
                 continue
 
-            mfile_artist, scrob_artist = empty(mfile.artist_norm), empty(scrob.artist_norm)
+            mfile_artist, scrob_artist = mfile.artist_norm, scrob.artist_norm
             artist_dist = lev.distance(mfile_artist, scrob_artist)
             artist_dist *= 1.1 - lev.jaro_winkler(mfile_artist, scrob_artist)
 
-            mfile_album, scrob_album = empty(mfile.album_norm), empty(scrob.album_norm)
+            mfile_album, scrob_album = mfile.album_norm, scrob.album_norm
             album_dist = lev.distance(mfile_album, scrob_album)
             album_dist *= 1.1 - lev.jaro_winkler(mfile_album, scrob_album)
 
-            mfile_track, scrob_track = empty(mfile.track_norm), empty(scrob.track_norm)
+            mfile_track, scrob_track = mfile.track_norm, scrob.track_norm
             track_dist = lev.distance(mfile_track, scrob_track)
             track_dist *= 1.1 - lev.jaro_winkler(mfile_track, scrob_track)
 
