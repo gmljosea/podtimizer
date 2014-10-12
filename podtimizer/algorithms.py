@@ -43,8 +43,13 @@ def match_initializer(mfilec):
     MUSIC_COLLECTION = mfilec
 
 
-def match_job(bucket):
-    return (bucket, MUSIC_COLLECTION.match_distance(bucket[0]))
+def match_job(tuple):
+    artist, albums = tuple
+    return MUSIC_COLLECTION.match_artists(artist, albums)
+
+
+def compute_distance(str1, str2):
+    return lev.distance(str1, str2) * (1.1 - lev.jaro_winkler(str1, str2))
 
 
 class Matcher():
@@ -57,6 +62,8 @@ class Matcher():
         self.mfile_to_scrobbles = {}
         self.scrobble_to_mfile = {}
         self.buckets = {}
+        self.bucket_library = {}
+        self.artist_mbids = {}
 
         # stats
         self.matched_by_mbid = 0
@@ -77,80 +84,75 @@ class Matcher():
                 self.matched_by_text += 1
                 self.scrobble_to_mfile[scrob] = mfile
             else:
+                artist, album, track = scrob.artist_norm, scrob.album_norm, scrob.track_norm
+                (self.bucket_library
+                    .setdefault(artist, {})
+                    .setdefault(album, {})
+                    .setdefault(track, deque())
+                    .append(scrob)
+                )
+                if scrob.artist_mbid is not None:
+                    self.artist_mbids[artist] = scrob.artist_mbid
                 self.buckets.setdefault(scrob.combined_name, deque()).append(scrob)
 
         pool = Pool(initializer=match_initializer, initargs=(self, ))
         print("Using {} cores".format(cpu_count()))
 
-        for bucket, mfile in pool.map(match_job, self.buckets.values()):
-            if mfile is not None:
-                self.mfile_to_scrobbles.setdefault(mfile, deque()).extend(bucket)
-                self.scrobble_to_mfile[scrob] = mfile
-                self.matched_by_distance += len(bucket)
-            else:
-                self.scrobble_to_mfile[scrob] = None
-                self.unmatched += len(bucket)
+        for result in pool.map(match_job, self.bucket_library.items()):
+            for mfile, bucket in result:
+                if mfile is not None:
+                    #print("Matched", mfile, "to", list(map(lambda x: x.row(), bucket)))
+                    self.mfile_to_scrobbles.setdefault(mfile, deque()).extend(bucket)
+                    self.scrobble_to_mfile[scrob] = mfile
+                    self.matched_by_distance += len(bucket)
+                else:
+                    #print("Unmatched", list(map(lambda x: x.row(), bucket)))
+                    self.unmatched += len(bucket)
 
-    def analyze_unmatched(self):
-        c = Counter(map(lambda x: x.combined_name, self.unmatched_scrobblings))
-        print(c.most_common(20))
-        print("buckets:", len(c))
-        print("scrobs:", len(self.unmatched_scrobblings))
+    def match_artists(self, s_artist, s_albums):
+        result = deque()
+        candidates = deque()
+        s_artist_mbid = self.artist_mbids.get(s_artist, None)
+        for l_artist, l_albums in self.mfilec.library.items():
+            l_artist_mbid = self.mfilec.artist_mbid.get(l_artist, None)
 
-    def match_distance(self, scrob):
+            if l_artist_mbid is None or s_artist_mbid is None:
+                distance = 0.4 * compute_distance(l_artist, s_artist)
+                if distance < Matcher.MAX_EDIT_DISTANCE:
+                    candidates.append((distance, l_albums))
+            elif l_artist_mbid == s_artist_mbid:
+                candidates.append((0, l_albums))
 
-        # Search all files and retrieve the most likely match, if any
-        candidate, distance = None, 0
-        for mfile in self.mfilec.all_files:
-            # Skip if artist mbid exist for both but don't match
-            # Album mbid is skipped because it would be very weird to have the album mbid but NOT
-            # the artist mbid. I mean, that really never happens.
-            # Track mbid is skipped too because if there was a match, it would have been found
-            # in the first check.
-            if (
-                mfile.artist_mbid is not None and
-                scrob.artist_mbid is not None and
-                mfile.artist_mbid != scrob.artist_mbid
-            ):
-                continue
+        for s_album, s_tracks in s_albums.items():
+            result.extend(self.match_albums(candidates, s_album, s_tracks))
 
-            mfile_artist, scrob_artist = mfile.artist_norm, scrob.artist_norm
-            artist_dist = lev.distance(mfile_artist, scrob_artist)
-            artist_dist *= 1.1 - lev.jaro_winkler(mfile_artist, scrob_artist)
+        return result
 
-            mfile_album, scrob_album = mfile.album_norm, scrob.album_norm
-            album_dist = lev.distance(mfile_album, scrob_album)
-            album_dist *= 1.1 - lev.jaro_winkler(mfile_album, scrob_album)
+    def match_albums(self, c_albums, s_album, s_tracks):
+        candidates = deque()
+        result = deque()
+        for c_distance, l_albums in c_albums:
+            for l_album, l_tracks in l_albums.items():
+                distance = c_distance + 0.2 * compute_distance(l_album, s_album)
+                if distance < Matcher.MAX_EDIT_DISTANCE:
+                    candidates.append((distance, l_tracks))
 
-            mfile_track, scrob_track = mfile.track_norm, scrob.track_norm
-            track_dist = lev.distance(mfile_track, scrob_track)
-            track_dist *= 1.1 - lev.jaro_winkler(mfile_track, scrob_track)
+        for s_track, bucket in s_tracks.items():
+            match = self.match_tracks(candidates, s_track, bucket)
+            if match is not None:
+                result.append(match)
+        return result
 
-            # The jaro-winkler metric is used to make strings with very similar prefixes closer
-            # in distance. The closer the prefix, the closer the metric is to 1, and in consequence
-            # the levenshtein distance will be scaled down.
-            # The constant is 1.1 instead of 1 because when the strings have a very long common
-            # prefix, jaro-winkler becomes 1.0. This makes two songs that are actually different,
-            # but only differ by something minuscule at the end of the name, have a metric of 1.0,
-            # which results in scaling levenshtein by 0. The .1 ensures the result is never 0 and
-            # forces levenshtein to always be relevant.
+    def match_tracks(self, c_tracks, s_track, bucket):
+        candidate, candidate_distance = None, 0
 
-            mfile_distance = 0.4 * artist_dist + 0.2 * album_dist + 0.4 * track_dist
-            # Album distance is given less weight because often one song may appear in multiple
-            # albums. Say, a regular album and a EP. We want both to be considered the same song.
+        for c_distance, l_tracks in c_tracks:
+            for l_track, mfile in l_tracks.items():
+                distance = c_distance + 0.4 * compute_distance(l_track, s_track)
+                if candidate is None or distance < candidate_distance:
+                    candidate, candidate_distance = mfile, distance
 
-            # The count is included in the heap to avoid heapq trying to compare for equality
-            # two MusicFile instances if both have the same distance.
-            if candidate is None or mfile_distance < distance:
-                candidate, distance = mfile, mfile_distance
-
-        if distance < Matcher.MAX_EDIT_DISTANCE:
-            logging.debug("Matched {} to {}".format(scrob, candidate))
-            return candidate
-        else:
-            logging.debug("Unmatched scrobbling {}".format(scrob))
-            logging.debug("Best candidate was {} with {}".format(candidate, distance))
-            return None
+        return (candidate, bucket) if candidate_distance < Matcher.MAX_EDIT_DISTANCE else None
 
 
 class TimeAverage():
