@@ -32,10 +32,13 @@ from podtimizer.files import Playlist
 from podtimizer.utils import empty, err_print
 
 
+# This global var is used only within the workers that match scrobblings
 MUSIC_COLLECTION = None
 
 
 def match_initializer(mfilec):
+    import signal
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
     global MUSIC_COLLECTION
     MUSIC_COLLECTION = mfilec
 
