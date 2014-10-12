@@ -24,7 +24,7 @@ import logging
 
 import pytz
 
-from collections import deque
+from collections import deque, Counter
 import heapq
 import Levenshtein as lev
 
@@ -43,8 +43,8 @@ def match_initializer(mfilec):
     MUSIC_COLLECTION = mfilec
 
 
-def match_job(scrob):
-    return MUSIC_COLLECTION.match(scrob)
+def match_job(bucket):
+    return (bucket, MUSIC_COLLECTION.match_distance(bucket[0]))
 
 
 class Matcher():
@@ -56,7 +56,7 @@ class Matcher():
         self.scrobc = scrobc
         self.mfile_to_scrobbles = {}
         self.scrobble_to_mfile = {}
-        self.unmatched_scrobblings = deque()
+        self.buckets = {}
 
         # stats
         self.matched_by_mbid = 0
@@ -64,35 +64,40 @@ class Matcher():
         self.matched_by_distance = 0
         self.unmatched = 0
 
+        for scrob in scrobc.all:
+            mfile = self.mfilec.tracks_by_mbid.get(scrob.track_mbid, None)
+            if mfile is not None:
+                self.mfile_to_scrobbles.setdefault(mfile, deque()).append(scrob)
+                self.matched_by_mbid += 1
+                self.scrobble_to_mfile[scrob] = mfile
+                continue
+            mfile = self.mfilec.tracks_by_text.get(scrob.combined_name, None)
+            if mfile is not None:
+                self.mfile_to_scrobbles.setdefault(mfile, deque()).append(scrob)
+                self.matched_by_text += 1
+                self.scrobble_to_mfile[scrob] = mfile
+            else:
+                self.buckets.setdefault(scrob.combined_name, deque()).append(scrob)
+
         pool = Pool(initializer=match_initializer, initargs=(self, ))
         print("Using {} cores".format(cpu_count()))
 
-        for scrob, mfile, type in pool.map(match_job, scrobc.all):
+        for bucket, mfile in pool.map(match_job, self.buckets.values()):
             if mfile is not None:
-                self.mfile_to_scrobbles.setdefault(mfile, deque())
-                self.mfile_to_scrobbles[mfile].append(scrob)
+                self.mfile_to_scrobbles.setdefault(mfile, deque()).extend(bucket)
                 self.scrobble_to_mfile[scrob] = mfile
-                if type == 1:
-                    self.matched_by_mbid += 1
-                elif type == 2:
-                    self.matched_by_text += 1
-                elif type == 3:
-                    self.matched_by_distance += 1
+                self.matched_by_distance += len(bucket)
             else:
-                self.unmatched_scrobblings.append(scrob)
-                self.unmatched += 1
                 self.scrobble_to_mfile[scrob] = None
+                self.unmatched += len(bucket)
 
-    def match(self, scrob):
-        # Try direct track mbid match
-        result = self.mfilec.tracks_by_mbid.get(scrob.track_mbid, None)
-        if result is not None:
-            return (scrob, result, 1)
+    def analyze_unmatched(self):
+        c = Counter(map(lambda x: x.combined_name, self.unmatched_scrobblings))
+        print(c.most_common(20))
+        print("buckets:", len(c))
+        print("scrobs:", len(self.unmatched_scrobblings))
 
-        # Try normalized Artist,Album,Track search
-        result = self.mfilec.tracks_by_text.get(scrob.combined_name, None)
-        if result is not None:
-            return (scrob, result, 2)
+    def match_distance(self, scrob):
 
         # Search all files and retrieve the most likely match, if any
         candidate, distance = None, 0
@@ -141,11 +146,11 @@ class Matcher():
 
         if distance < Matcher.MAX_EDIT_DISTANCE:
             logging.debug("Matched {} to {}".format(scrob, candidate))
-            return (scrob, candidate, 3)
+            return candidate
         else:
             logging.debug("Unmatched scrobbling {}".format(scrob))
             logging.debug("Best candidate was {} with {}".format(candidate, distance))
-            return (scrob, None, 4)
+            return None
 
 
 class TimeAverage():
