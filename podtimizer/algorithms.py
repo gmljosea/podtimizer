@@ -19,6 +19,7 @@ from __future__ import unicode_literals, division
 
 from datetime import datetime
 from math import sqrt
+from multiprocessing import Pool, cpu_count
 import logging
 
 import pytz
@@ -48,8 +49,10 @@ class Matcher():
         self.matched_by_distance = 0
         self.unmatched = 0
 
-        for scrob in scrobc.all:
-            mfile = self.match(scrob)
+        pool = Pool()
+        print("Using {} cores".format(cpu_count()))
+
+        for scrob, mfile in pool.map(self.match, scrobc.all):
             if mfile is not None:
                 self.mfile_to_scrobbles.setdefault(mfile, deque())
                 self.mfile_to_scrobbles[mfile].append(scrob)
@@ -65,7 +68,7 @@ class Matcher():
         track_mbid = scrob.track_mbid
         if track_mbid is not None and track_mbid in self.mfilec.tracks_by_mbid:
             self.matched_by_mbid += 1
-            return self.mfilec.tracks_by_mbid[track_mbid]
+            return (scrob, self.mfilec.tracks_by_mbid[track_mbid])
 
         # Try normalized Artist,Album,Track search
         result = (
@@ -76,7 +79,7 @@ class Matcher():
         )
         if result is not None:
             self.matched_by_text += 1
-            return result
+            return (scrob, result)
 
         # Search all files and retrieve the most likely match, if any
         candidates, count = [], 0
@@ -137,11 +140,11 @@ class Matcher():
             #   If the normalized scrobbling artist+track name is very similar to the normalized
             #   music file artist+track name, match it.
             # -
-            return candidate
+            return (scrob, candidate)
         else:
             logging.debug("Unmatched scrobbling {}".format(scrob))
             logging.debug("Best candidate was {} with {}".format(candidate, distance))
-            return None
+            return (scrob, None)
 
 
 class TimeAverage():

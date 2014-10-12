@@ -109,12 +109,8 @@ class ScrobblingCollection():
         self.db.commit()
         err_print("Finished sync")
 
-    def __del__(self):
-        self.db.close()
-
     def __len__(self):
         return len(self.all)
-
 
 
 class Lastfm():
@@ -122,6 +118,7 @@ class Lastfm():
     API_KEY = "e4f145a5cd3f3781bf6dbd17d2019e3e"
     API_URL = "http://ws.audioscrobbler.com/2.0/"
     TIMEOUT = 10
+    SESSION = requests.Session()
 
     class APIException(Exception):
 
@@ -199,7 +196,7 @@ class Lastfm():
             if i > 1:
                 logging.debug("Retrying...")
             try:
-                r = requests.get(cls.API_URL, params=params, timeout=(cls.TIMEOUT, cls.TIMEOUT))
+                r = cls.SESSION.get(cls.API_URL, params=params, timeout=(cls.TIMEOUT, cls.TIMEOUT))
                 if r.status_code != requests.codes.ok:
                     logging.debug("API HTTP error {} - {}".format(r.status_code, r.reason))
                     continue
