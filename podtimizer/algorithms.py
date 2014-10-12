@@ -32,6 +32,18 @@ from podtimizer.files import Playlist
 from podtimizer.utils import empty, err_print
 
 
+MUSIC_COLLECTION = None
+
+
+def match_initializer(mfilec):
+    global MUSIC_COLLECTION
+    MUSIC_COLLECTION = mfilec
+
+
+def match_job(scrob):
+    return MUSIC_COLLECTION.match(scrob)
+
+
 class Matcher():
 
     MAX_EDIT_DISTANCE = 2.0
@@ -49,10 +61,10 @@ class Matcher():
         self.matched_by_distance = 0
         self.unmatched = 0
 
-        pool = Pool()
+        pool = Pool(initializer=match_initializer, initargs=(self, ))
         print("Using {} cores".format(cpu_count()))
 
-        for scrob, mfile in pool.map(self.match, scrobc.all):
+        for scrob, mfile in pool.map(match_job, scrobc.all):
             if mfile is not None:
                 self.mfile_to_scrobbles.setdefault(mfile, deque())
                 self.mfile_to_scrobbles[mfile].append(scrob)
