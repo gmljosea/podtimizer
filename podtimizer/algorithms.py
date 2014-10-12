@@ -67,34 +67,33 @@ class Matcher():
         pool = Pool(initializer=match_initializer, initargs=(self, ))
         print("Using {} cores".format(cpu_count()))
 
-        for scrob, mfile in pool.map(match_job, scrobc.all):
+        for scrob, mfile, type in pool.map(match_job, scrobc.all):
             if mfile is not None:
                 self.mfile_to_scrobbles.setdefault(mfile, deque())
                 self.mfile_to_scrobbles[mfile].append(scrob)
                 self.scrobble_to_mfile[scrob] = mfile
+                if type == 1:
+                    self.matched_by_mbid += 1
+                elif type == 2:
+                    self.matched_by_text += 1
+                elif type == 3:
+                    self.matched_by_distance += 1
             else:
                 self.unmatched_scrobblings.append(scrob)
                 self.unmatched += 1
                 self.scrobble_to_mfile[scrob] = None
 
     def match(self, scrob):
-
         # Try direct track mbid match
-        track_mbid = scrob.track_mbid
-        if track_mbid is not None and track_mbid in self.mfilec.tracks_by_mbid:
-            self.matched_by_mbid += 1
-            return (scrob, self.mfilec.tracks_by_mbid[track_mbid])
+        result = self.mfilec.tracks_by_mbid.get(scrob.track_mbid, None)
+        if result is not None:
+            return (scrob, result, 1)
 
         # Try normalized Artist,Album,Track search
-        result = (
-            self.mfilec.tracks_by_text
-            .get(scrob.artist_norm, {})
-            .get(scrob.album_norm, {})
-            .get(scrob.track_norm, None)
-        )
+        artist, album, track = scrob.artist_norm, scrob.album_norm, scrob.track_norm
+        result = self.mfilec.tracks_by_text.get("{}{}{}".format(artist, album, track), None)
         if result is not None:
-            self.matched_by_text += 1
-            return (scrob, result)
+            return (scrob, result, 2)
 
         # Search all files and retrieve the most likely match, if any
         candidate, distance = None, 0
@@ -142,23 +141,12 @@ class Matcher():
                 candidate, distance = mfile, mfile_distance
 
         if distance < Matcher.MAX_EDIT_DISTANCE:
-            self.matched_by_distance += 1
             logging.debug("Matched {} to {}".format(scrob, candidate))
-
-            # Last resort. In edge cases, the best candidate might actually be the correct file,
-            # but might have a distance larger than maximum. Here we do additional tests over the
-            # best candidate and determine wether to match to it or not.
-
-            # Cases:
-            # - The track name actually includes the band's name before the actual track name.
-            #   If the normalized scrobbling artist+track name is very similar to the normalized
-            #   music file artist+track name, match it.
-            # -
-            return (scrob, candidate)
+            return (scrob, candidate, 3)
         else:
             logging.debug("Unmatched scrobbling {}".format(scrob))
             logging.debug("Best candidate was {} with {}".format(candidate, distance))
-            return (scrob, None)
+            return (scrob, None, 4)
 
 
 class TimeAverage():
@@ -184,10 +172,10 @@ class SongRank():
     def __init__(self, mfilec, scrobc):
         err_print("Matching scrobblings to local music files...")
         self.matcher = Matcher(mfilec, scrobc)
-        logging.debug("Matched {} using track MBID".format(self.matcher.matched_by_mbid))
-        logging.debug("Matched {} using track text metadata".format(self.matcher.matched_by_text))
-        logging.debug("Matched {} using track string distance".format(self.matcher.matched_by_distance))
-        logging.debug("{} unmatched".format(self.matcher.unmatched))
+        err_print("Matched {} using track MBID".format(self.matcher.matched_by_mbid))
+        err_print("Matched {} using track text metadata".format(self.matcher.matched_by_text))
+        err_print("Matched {} using track string distance".format(self.matcher.matched_by_distance))
+        err_print("{} unmatched".format(self.matcher.unmatched))
         err_print("Ranking music files...")
         self.timeavg = TimeAverage(self.matcher)
 

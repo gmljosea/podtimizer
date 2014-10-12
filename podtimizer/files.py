@@ -166,9 +166,7 @@ class MusicFileCollection():
         album = mfile.album_norm
         track = mfile.track_norm
 
-        self.tracks_by_text.setdefault(artist, {})
-        self.tracks_by_text[artist].setdefault(album, {})
-        self.tracks_by_text[artist][album].setdefault(track, mfile)
+        self.tracks_by_text.setdefault("{}{}{}".format(artist, album, track), mfile)
 
         mbid = mfile.mbid
         if mbid is not None:
