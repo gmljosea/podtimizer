@@ -69,6 +69,8 @@ class Scrobbling():
         self.date = datetime.fromtimestamp(date, utc)
         self.date_timestamp = date
 
+        self.combined_name = "{}{}{}".format(self.artist_norm, self.album_norm, self.track_norm)
+
     def row(self):
         return (
             self.artist, self.artist_mbid,

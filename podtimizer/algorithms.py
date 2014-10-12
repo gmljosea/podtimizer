@@ -90,8 +90,7 @@ class Matcher():
             return (scrob, result, 1)
 
         # Try normalized Artist,Album,Track search
-        artist, album, track = scrob.artist_norm, scrob.album_norm, scrob.track_norm
-        result = self.mfilec.tracks_by_text.get("{}{}{}".format(artist, album, track), None)
+        result = self.mfilec.tracks_by_text.get(scrob.combined_name, None)
         if result is not None:
             return (scrob, result, 2)
 
