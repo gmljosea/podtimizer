@@ -27,7 +27,7 @@ import sys
 
 from pytz import utc
 
-from podtimizer.utils import normalize, err_print
+from podtimizer.utils import normalize, err_print, make_database
 
 
 SCROBBLING_SCHEMA_SQL = """
@@ -69,6 +69,8 @@ class Scrobbling():
         self.date = datetime.fromtimestamp(date, utc)
         self.date_timestamp = date
 
+        self.combined_name = "{}{}{}".format(self.artist_norm, self.album_norm, self.track_norm)
+
     def row(self):
         return (
             self.artist, self.artist_mbid,
@@ -85,45 +87,11 @@ class ScrobblingCollection():
 
     def __init__(self, username, db_format):
         self.username = username
-        self._setup_db(db_format.format(username))
+        self.db = make_database(db_format.format(username), SCROBBLING_SCHEMA_SQL)
         self.all = deque()
 
         for row in self.db.execute(ALL_SCROBBLINGS_SQL):
             self.all.append(Scrobbling(*tuple(row)))
-
-    def _setup_db(self, db_name):
-        db_path = os.path.split(db_name)[0]
-        if not os.path.exists(db_path):
-            try:
-                os.makedirs(db_path)
-            except OSError:
-                logging.critical("Couldn't create dir for the cached scrobblings database")
-                sys.exit(-1)
-        try:
-            self._connect_to_db(db_name)
-            return
-        except sqlite3.DatabaseError as e:
-            logging.error("Database error, deleting and retrying.")
-
-        try:
-            os.remove(db_name)
-            self._connect_to_db(db_name)
-        except OSError:
-            logging.critical("Couldn't delete {}, aborting.".format(db_name))
-            sys.exit(-1)
-        except sqlite3.DatabaseError as e:
-            logging.critical("Couldn't create new database in {}, aborting.".format(db_name))
-            sys.exit(-1)
-
-    def _connect_to_db(self, db_name):
-        self.db = sqlite3.connect(
-            db_name,
-            detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES,
-            isolation_level=None
-        )
-        self.db.execute("PRAGMA synchronous = 0")
-        self.db.execute(SCROBBLING_SCHEMA_SQL)
-
 
     def get_most_recent_date(self):
         r = self.db.execute(LAST_DATE_SQL).fetchone()
@@ -143,12 +111,8 @@ class ScrobblingCollection():
         self.db.commit()
         err_print("Finished sync")
 
-    def __del__(self):
-        self.db.close()
-
     def __len__(self):
         return len(self.all)
-
 
 
 class Lastfm():
@@ -156,6 +120,7 @@ class Lastfm():
     API_KEY = "e4f145a5cd3f3781bf6dbd17d2019e3e"
     API_URL = "http://ws.audioscrobbler.com/2.0/"
     TIMEOUT = 10
+    SESSION = requests.Session()
 
     class APIException(Exception):
 
@@ -178,7 +143,7 @@ class Lastfm():
             try:
                 data = cls.call_api(api_params)
             except Lastfm.APIException:
-                logging.errors("Failed API call.")
+                logging.error("Failed API call.")
                 err_print("API Error, aborting sync. Will work with whatever we have.")
                 break
 
@@ -233,7 +198,7 @@ class Lastfm():
             if i > 1:
                 logging.debug("Retrying...")
             try:
-                r = requests.get(cls.API_URL, params=params, timeout=(cls.TIMEOUT, cls.TIMEOUT))
+                r = cls.SESSION.get(cls.API_URL, params=params, timeout=(cls.TIMEOUT, cls.TIMEOUT))
                 if r.status_code != requests.codes.ok:
                     logging.debug("API HTTP error {} - {}".format(r.status_code, r.reason))
                     continue

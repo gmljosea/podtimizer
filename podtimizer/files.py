@@ -18,12 +18,48 @@
 from __future__ import unicode_literals
 
 from collections import deque
+from datetime import datetime
 import logging
 import os
+import pickle
+import sys
+import sqlite3
 
 import mutagen
 
-from podtimizer.utils import normalize, validate_mbid, err_print
+from podtimizer.utils import normalize, validate_mbid, err_print, make_database
+
+
+MUSIC_FILE_SCHEMA_SQL = """
+    CREATE TABLE IF NOT EXISTS MusicFile (
+        filename TEXT NOT NULL UNIQUE,
+        mtime FLOAT NOT NULL,
+        music_file BLOB NULL
+    );"""
+
+INSERT_MUSIC_FILE_SQL = "INSERT OR REPLACE INTO MusicFile VALUES (?,?,?)"
+SELECT_MUSIC_FILE_SQL = "SELECT * FROM MusicFile WHERE filename=?"
+
+
+class MetadataCache():
+
+    class TrashFile(Exception):
+        pass
+
+    def __init__(self, db_name):
+        self.db = make_database(db_name, MUSIC_FILE_SCHEMA_SQL)
+
+    def get_file(self, filename, mtime):
+        for row in self.db.execute(SELECT_MUSIC_FILE_SQL, (filename, )):
+            if row[2] is None:
+                raise MetadataCache.TrashFile()
+            if datetime.fromtimestamp(mtime) >= datetime.fromtimestamp(row[1]):
+                return pickle.loads(row[2])
+        return None
+
+    def store_file(self, filename, mtime, music_file, update=True):
+        mfile = pickle.dumps(music_file) if music_file is not None else None
+        self.db.execute(INSERT_MUSIC_FILE_SQL, (filename, mtime, mfile))
 
 
 class MusicFile():
@@ -117,29 +153,27 @@ class MusicFile():
 class MusicFileCollection():
     """A collection of music files"""
 
-    def __init__(self):
+    def __init__(self, cache_name):
         self.tracks_by_mbid = {}
         self.tracks_by_text = {}
-        self.no_mbid = deque()
+        self.library = {}
         self.all_files = deque()
+        self.cache = MetadataCache(cache_name)
+        self.artist_mbid = {}
 
     def add_file(self, mfile):
         """Adds the MusicFile mfile to the collection"""
-        artist = mfile.artist_norm
-        album = mfile.album_norm
-        track = mfile.track_norm
-
-        self.tracks_by_text.setdefault(artist, {})
-        self.tracks_by_text[artist].setdefault(album, {})
-        self.tracks_by_text[artist][album].setdefault(track, mfile)
-
-        mbid = mfile.mbid
-        if mbid is not None:
-            self.tracks_by_mbid[mbid] = mfile
-        else:
-            self.no_mbid.append(mfile)
-
+        artist, album, track = mfile.name_normalized
         self.all_files.append(mfile)
+        self.tracks_by_text["{}{}{}".format(artist, album, track)] = mfile
+        self.library.setdefault(artist, {}).setdefault(album, {})[track] = mfile
+
+        if mfile.mbid is not None:
+            self.tracks_by_mbid[mfile.mbid] = mfile
+
+        if mfile.artist_mbid is not None:
+            self.artist_mbid[artist] = mfile.artist_mbid
+
 
     def scan_directory(self, directory):
         """
@@ -150,12 +184,30 @@ class MusicFileCollection():
         for root, __, filenames in os.walk(directory):
             err_print("-- Scanning", root)
             for filename in filenames:
+                full_filename = os.path.join(root, filename)
+                mtime = os.stat(full_filename).st_mtime
+
                 try:
-                    self.add_file(MusicFile(os.path.join(root, filename)))
+                    cached_file = self.cache.get_file(full_filename, mtime)
+                except MetadataCache.TrashFile:
+                    logging.debug("Cache says {} is trash, ignoring.".format(filename))
+                    continue
+
+                if cached_file is not None:
+                    logging.debug("Reading cached metadata of {}".format(filename))
+                    self.add_file(cached_file)
+                    continue
+
+                try:
+                    mfile = MusicFile(full_filename)
+                    self.add_file(mfile)
+                    self.cache.store_file(full_filename, mtime, mfile)
                 except MusicFile.InsufficientMetadata:
                     logging.debug("Skipping {} due to insufficient metadata.".format(filename))
+                    self.cache.store_file(full_filename, mtime, None)
                 except MusicFile.UnknownFormat:
                     logging.debug("Not a music file {}-".format(filename))
+                    self.cache.store_file(full_filename, mtime, None)
 
     def __len__(self):
         return len(self.all_files)

@@ -17,7 +17,10 @@
 
 from __future__ import print_function, unicode_literals
 
+import logging
+import os
 import re
+import sqlite3
 import sys
 import uuid
 
@@ -33,7 +36,7 @@ def normalize(name):
     It returns None if the argument is None, or if the argument only has whitespace.
     """
     if name is None or len(name.strip()) == 0:
-        return None
+        return ""
 
     name = name.strip().lower()
     name = re.sub(r"\s+\(feat. [^)]*\)", "", name, flags=re.IGNORECASE | re.UNICODE)
@@ -55,3 +58,41 @@ def validate_mbid(mbid):
 
 def err_print(*args):
     print(*args, file=sys.stderr)
+
+
+def make_database(filename, schema_sql):
+    def _connect(filename, schema_sql):
+        db = sqlite3.connect(
+            filename,
+            detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES,
+            isolation_level=None
+        )
+        # Our databases are nothing more than caches so we can drop some contraints to gain speed
+        db.execute("PRAGMA synchronous = 0")
+        db.execute(schema_sql)
+        return db
+
+    try:
+        path = os.path.split(filename)[0]
+        not os.path.exists(path) and os.makedirs(path)
+        # We could use exist_ok in makedirs, but 2.7 doesn't support it.
+    except OSError:
+        # Well, screw you, get a memory database instead
+        logging.error("Couldn't create dir for database {}, using memory instead.".format(filename))
+        return _connect(":memory:", schema_sql)
+
+    try:
+        return _connect(filename, schema_sql)
+    except sqlite3.DatabaseError:
+        logging.error("Old database {} was corrupted, recreating.".format(filename))
+
+    try:
+        os.remove(filename)
+        return _connect(filename, schema_sql)
+    except OSError:
+        logging.error("Couldn't delete {}, using memory instead.".format(filename))
+        return _connect(":memory:", schema_sql)
+    except sqlite3.DatabaseError:
+        logging.error("Couldn't recreate database {}, using memory instead.".format(filename))
+        return _connect(":memory:", schema_sql)
+
