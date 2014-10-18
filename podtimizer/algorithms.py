@@ -33,19 +33,19 @@ from podtimizer.utils import empty, err_print
 
 
 # This global var is used only within the workers that match scrobblings
-MUSIC_COLLECTION = None
+MATCHER = None
 
 
-def match_initializer(mfilec):
+def match_initializer(matcher):
     import signal
     signal.signal(signal.SIGINT, signal.SIG_IGN)
-    global MUSIC_COLLECTION
-    MUSIC_COLLECTION = mfilec
+    global MATCHER
+    MATCHER = mfilec
 
 
 def match_job(tuple):
     artist, albums = tuple
-    return MUSIC_COLLECTION.match_artists(artist, albums)
+    return MATCHER.match_artists(artist, albums)
 
 
 def compute_distance(str1, str2):
