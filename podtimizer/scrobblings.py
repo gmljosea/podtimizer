@@ -20,12 +20,10 @@ from __future__ import unicode_literals
 from collections import deque
 from datetime import datetime
 import logging
-import os
-import requests
 import sqlite3
-import sys
 
 from pytz import utc
+import requests
 
 from podtimizer.utils import normalize, err_print, make_database
 
@@ -52,6 +50,7 @@ def empty_to_none(string):
 
 
 class Scrobbling():
+
     def __init__(self, artist, artist_mbid, album, album_mbid, track, track_mbid, date):
 
         self.artist = artist
@@ -128,36 +127,61 @@ class Lastfm():
             self.response = response
 
     @classmethod
+    def fetch_page(cls, api_params):
+        try:
+            data = cls.call_api(api_params)
+        except Lastfm.APIException:
+            logging.error("Failed API call.")
+            err_print("API Error, aborting sync. Will work with whatever we have.")
+            raise
+
+        if "recenttracks" not in data or "@attr" not in data["recenttracks"]:
+            logging.error("Unexpected response format from Last.fm")
+            logging.debug("Last.fm returned {}".format(data))
+            err_print("Aborting sync, will work with whatever we have.")
+            raise Lastfm.APIException("Invalid response format")
+
+        return data
+
+    @classmethod
     def get_recent_tracks(cls, username, starting_from=0):
+        # Scrobblings are retrieved ordered by date, witht he oldest coming first.
+        # The API makes it impossible to actually query those tracks in that
+        # order, so it must query the first page to obtian a page count, then
+        # query the last page and process it.
+        # The initial page count query must be done for each page to ensure
+        # no scrobbling are lost if the user is currently listening to music.
+        # Otherwise scrobblings might get pushed to an already processed page.
 
         api_params = {
             "method": "user.getrecenttracks",
             "user": username,
             "from": starting_from,
-            "page": 2000000000,
+            "page": 1,
             "limit": 200,
             "format": "json"
         }
 
         while True:
             try:
-                data = cls.call_api(api_params)
+                # Query the first page to obtain a page count
+                api_params["page"] = 1
+                data = cls.fetch_page(api_params)
             except Lastfm.APIException:
-                logging.error("Failed API call.")
-                err_print("API Error, aborting sync. Will work with whatever we have.")
-                break
-
-            if "recenttracks" not in data:
-                logging.error("Unexpected response format from Last.fm")
-                logging.debug("Last.fm returned {}".format(data))
-                err_print("Aborting sync, will work with whatever we have.")
-                break
-
-            if "@attr" not in data["recenttracks"]:
                 break
 
             tracks_left = data["recenttracks"]["@attr"]["total"]
+
+            if tracks_left == 0:
+                break
             err_print(tracks_left, "scrobblings left to sync")
+
+            try:
+                # Query the last page for actual processing
+                api_params["page"] = data["recenttracks"]["@attr"]["totalPages"]
+                data = cls.fetch_page(api_params)
+            except Lastfm.APIException:
+                break
 
             if not isinstance(data["recenttracks"]["track"], list):
                 data["recenttracks"]["track"] = [data["recenttracks"]["track"]]
@@ -181,7 +205,10 @@ class Lastfm():
                     logging.debug("Skipping scrobbling with insufficient metadata.")
                     continue
 
-                api_params["from"] = date
+                # The API returns scrobbles that are greater then or equal to
+                # the provided date. We must increase it to ensure it doesn't
+                # return the last track over and over.
+                api_params["from"] = date + 1
 
                 yield Scrobbling(
                     artist=artist, artist_mbid=artist_mbid,

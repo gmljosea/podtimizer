@@ -64,7 +64,7 @@ def make_database(filename, schema_sql):
     def _connect(filename, schema_sql):
         db = sqlite3.connect(
             filename,
-            detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES,
+            detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES,
             isolation_level=None
         )
         # Our databases are nothing more than caches so we can drop some contraints to gain speed
@@ -95,4 +95,3 @@ def make_database(filename, schema_sql):
     except sqlite3.DatabaseError:
         logging.error("Couldn't recreate database {}, using memory instead.".format(filename))
         return _connect(":memory:", schema_sql)
-
