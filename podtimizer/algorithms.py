@@ -40,7 +40,7 @@ def match_initializer(matcher):
     import signal
     signal.signal(signal.SIGINT, signal.SIG_IGN)
     global MATCHER
-    MATCHER = mfilec
+    MATCHER = matcher
 
 
 def match_job(tuple):
